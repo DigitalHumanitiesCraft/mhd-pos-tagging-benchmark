@@ -33,8 +33,11 @@ Download ReM v2.1 CORA-XML from [the official site](https://www.linguistics.rub.
 | [TAGSET-MAPPING.md](docs/TAGSET-MAPPING.md) | HiTS → MHDBDB mapping rationale and gap analysis |
 | [CORA-XML-FORMAT.md](docs/CORA-XML-FORMAT.md) | ReM data format reference |
 | [OVERLAP-TABLE.md](docs/OVERLAP-TABLE.md) | ReM ↔ MHDBDB text overlap mapping |
-| [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | Full implementation plan |
-| [journal.md](docs/journal.md) | Decision log and process journal |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pipeline, data model, adapter interface, modules |
+| [REQUIREMENTS.md](docs/REQUIREMENTS.md) | User stories, epics, success criteria |
+| [RESEARCH.md](docs/RESEARCH.md) | Academic context, related work, research gap |
+| [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | Historical plan (Phase 2 items) |
+| [JOURNAL.md](docs/JOURNAL.md) | Decision log and process journal |
 
 ## License
 

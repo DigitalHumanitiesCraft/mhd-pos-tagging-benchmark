@@ -110,8 +110,34 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 - **Pipeline:** ready for gold passthrough evaluation
 - **Next:** run `mhd-bench evaluate --adapter passthrough` on full corpus (should be 100%)
 
-## 2026-03-16 — save
+## 2026-03-16 — save (1)
 
-**Done:** Full Phase 1 MVP: repo scaffold, CORA-XML parser, tagset mapper, gold passthrough adapter, evaluation engine, report generator, CLI, 23 tests. YAML mapping validated against full ReM corpus (0 unmapped tags). Promptotyping docs distilled (HITS-TAGSET.md, TAGSET-MAPPING.md, journal.md). All docs verified against web sources.
+**Done:** Full Phase 1 MVP: repo scaffold, CORA-XML parser, tagset mapper, gold passthrough adapter, evaluation engine, report generator, CLI, 23 tests. YAML mapping validated against full ReM corpus (0 unmapped tags). Promptotyping docs distilled. All docs verified against web sources.
 **Decisions:** Suffix system A/S/D/N confirmed by Katharina. DGA→DET, DGS→PRO, DPOSD→POS, PTKANT→INJ, KO*→null (exclude Phase 1), PAVW→ADV (not IPA). ReM citation added. Benchmark license CC BY-NC-SA 4.0 (intentional, ReM itself is CC BY-SA 4.0).
 **Dead ends:** Initial YAML draft based on HiTS publication had 32 unmapped tags — real ReM uses suffix system not fully documented in Dipper et al. 2013.
+
+## 2026-03-16 — save (2)
+
+**Done:** Context compression (IMPLEMENTATION-PLAN 277→30, TAGSET-MAPPING 169→107, CLAUDE.md 81→50). New docs: ARCHITECTURE.md, REQUIREMENTS.md, RESEARCH.md. All docs UPPERCASE. README updated.
+**Decisions:** Benchmark fully technology-agnostic (not just LLMs). IMPLEMENTATION-PLAN demoted to historical reference. Three paper framing options identified, deferred.
+**Dead ends:** None.
+
+## 2026-03-16 — handoff
+
+**Summary:** Built complete Phase 1 MVP from scratch: CORA-XML parser, HiTS→MHDBDB mapper (73 tags, 2.58M tokens), evaluation engine, CLI. Full Promptotyping doc suite (10 docs) distilled, compressed, verified.
+
+**Phase:** Implementation (Phase 1 done, Phase 2 ready). All 10 docs current.
+
+**Open issues:**
+- Gold passthrough not yet run on full corpus (should produce 100%)
+- KO* (22k tokens) excluded — Phase 2 needs Verbstellung-Heuristik
+- Inter-annotator consistency in ReM not checked
+- LLM input format undecided: `form_diplomatic` vs. `form_modernized`
+- RESEARCH.md citations from web search, not verified against originals
+- GHisBERT usability for MHG POS not confirmed
+
+**Next steps:**
+1. Run gold passthrough on full corpus (must be 100%)
+2. Build first real adapter (small subset test on overlap texts)
+3. Decide diplomatic vs. modernized forms for LLM input
+4. Verify RESEARCH.md citations before paper writing
