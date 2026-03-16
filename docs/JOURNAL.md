@@ -124,20 +124,30 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 
 ## 2026-03-16 — handoff
 
-**Summary:** Built complete Phase 1 MVP from scratch: CORA-XML parser, HiTS→MHDBDB mapper (73 tags, 2.58M tokens), evaluation engine, CLI. Full Promptotyping doc suite (10 docs) distilled, compressed, verified.
+**Summary:** Built complete Phase 1 MVP from scratch in one session. CORA-XML parser, HiTS→MHDBDB mapper (73 tags, 2.58M tokens, 0 unmapped), evaluation engine, CLI, 23 tests. Full Promptotyping doc suite (11 docs) distilled, compressed, verified against web sources. Research question sharpened: "Which model tags MHG POS best?" — head-to-head comparison enabled by ground truth, models interchangeable. Repo public at https://github.com/DigitalHumanitiesCraft/mhd-pos-tagging-benchmark.
 
-**Phase:** Implementation (Phase 1 done, Phase 2 ready). All 10 docs current.
+**Phase:** Implementation (Phase 1 done, Phase 2 ready). 11 docs, all current:
+- Knowledge: MHDBDB-TAGSET, HITS-TAGSET, CORA-XML-FORMAT, OVERLAP-TABLE
+- Architecture: ARCHITECTURE.md (pipeline, data model, adapter interface)
+- Requirements: REQUIREMENTS.md (4 epics, success criteria)
+- Research: RESEARCH.md (related work, gap, paper framing)
+- Mapping: TAGSET-MAPPING.md + hits_to_mhdbdb.yaml v0.2.0
+- Process: JOURNAL.md, IMPLEMENTATION-PLAN.md (historical)
 
 **Open issues:**
 - Gold passthrough not yet run on full corpus (should produce 100%)
-- KO* (22k tokens) excluded — Phase 2 needs Verbstellung-Heuristik
-- Inter-annotator consistency in ReM not checked
+- KO* (22k tokens) excluded — Phase 2 needs Verbstellung-Heuristik for context-sensitive resolution
+- Inter-annotator consistency in ReM not checked (different `annotation_by` values)
 - LLM input format undecided: `form_diplomatic` vs. `form_modernized`
-- RESEARCH.md citations from web search, not verified against originals
-- GHisBERT usability for MHG POS not confirmed
+- RESEARCH.md citations from web search, not verified against original papers
+- GHisBERT (Beck & Köllner 2023) usability for MHG POS not confirmed
+- Team roles corrected (Katharina=MHDBDB lead/Salzburg, Michael=professor/TU Darmstadt) — verify with team
 
 **Next steps:**
-1. Run gold passthrough on full corpus (must be 100%)
-2. Build first real adapter (small subset test on overlap texts)
-3. Decide diplomatic vs. modernized forms for LLM input
-4. Verify RESEARCH.md citations before paper writing
+1. Run `mhd-bench evaluate` with passthrough on full corpus — must be 100%
+2. Small subset test on overlap texts (morgen geplant)
+3. Build first real adapter
+4. Decide diplomatic vs. modernized forms for LLM input
+5. Verify RESEARCH.md citations before paper writing
+
+**Git:** 5 commits on main, last `5ba386a`, pushed to origin.
