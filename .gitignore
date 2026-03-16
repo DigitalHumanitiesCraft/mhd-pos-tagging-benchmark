@@ -1,0 +1,41 @@
+# ReM corpus data (user downloads separately)
+ReM-v2.1_coraxml/
+ReM-v2.1_tei/
+ReM-v2.1_json/
+data/
+
+# Benchmark results (local)
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage

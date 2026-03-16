@@ -1,0 +1,159 @@
+# HiTS → MHDBDB Tagset Mapping
+#
+# Maps HiTS POS tags (~80 tags, used by ReM) to MHDBDB POS tags (19 tags).
+# This is the single source of truth for tagset conversion in the benchmark.
+#
+# Convention:
+#   null  = unmappable (token excluded from evaluation)
+#   tag   = direct mapping to MHDBDB tag
+#
+# Sources:
+#   HiTS: Dipper et al. 2013, "HiTS: ein Tagset für historische Sprachstufen des Deutschen"
+#   MHDBDB: mhdbdb-tei-only/.gemini/skills/pos-disambiguator/SKILL.md
+#
+# IMPORTANT: This is a DRAFT based on documentation. Must be validated against
+# actual ReM data with `mhd-bench mapping --validate`.
+#
+# Last updated: 2026-03-16
+
+version: "0.1.0"
+source_tagset: "HiTS"
+target_tagset: "MHDBDB"
+
+mappings:
+  # ── Nouns ──────────────────────────────────────────
+  NA:      NOM    # Appellativum (common noun)
+  NE:      NAM    # Eigenname (proper noun)
+
+  # ── Adjectives ─────────────────────────────────────
+  ADJA:    ADJ    # attributive adjective
+  ADJD:    ADJ    # predicative/adverbial adjective
+  ADJN:    ADJ    # nominalized adjective (could be NOM — see ambiguous_mappings)
+  ADJS:    ADJ    # adjective, other
+
+  # ── Adverbs ────────────────────────────────────────
+  AVD:     ADV    # demonstrative adverb (dâ, hie)
+  AVG:     ADV    # general adverb
+  AVW:     ADV    # interrogative adverb (wâ, wie — could be IPA, see ambiguous_mappings)
+  AVNEG:   NEG    # negative adverb (nie, niemer)
+  AVD-KO:  ADV    # comparative demonstrative adverb
+
+  # ── Determiners (HiTS "D" category) ────────────────
+  # HiTS separates D and P; MHDBDB uses DET for attributive, PRO for substitutive
+  DD:      DET    # demonstrative determiner
+  DDART:   DET    # demonstrative determiner used as article (der, diu, daz)
+  DDSUB:   DET    # demonstrative determiner, other
+  DI:      DET    # indefinite determiner (ein)
+  DIART:   DET    # indefinite article
+  DISUB:   DET    # indefinite determiner, other
+  DG:      POS    # possessive determiner → MHDBDB POS (morphologically distinct)
+  DGPOS:   POS    # possessive determiner (explicit)
+  DGSUB:   POS    # possessive determiner, other
+  DP:      DET    # demonstrative/other determiner
+  DW:      DET    # interrogative/relative determiner (welch)
+  DWSUB:   DET    # interrogative determiner, other
+
+  # ── Pronouns ───────────────────────────────────────
+  PPER:    PRO    # personal pronoun (ich, du, er)
+  PRF:     PRO    # reflexive pronoun (sich)
+  PI:      PRO    # indefinite pronoun
+  PISUB:   PRO    # indefinite pronoun, substitutive
+  PG:      PRO    # possessive pronoun (standalone, not before noun)
+  PGSUB:   PRO    # possessive pronoun, substitutive
+  PW:      PRO    # interrogative/relative pronoun (wer, waz — could be IPA)
+  PWSUB:   PRO    # interrogative pronoun, substitutive
+  PD:      PRO    # demonstrative pronoun (der/daz standalone)
+  PDSUB:   PRO    # demonstrative pronoun, substitutive
+  PPRO:    PRO    # generic pronoun category
+
+  # ── Adpositions ────────────────────────────────────
+  APPR:    PRP    # preposition
+  APPO:    PRP    # postposition
+  APZR:    PRP    # circumposition (right part)
+  APPRART: PRP    # preposition fused with article (could be PRP DET compound)
+
+  # ── Particles ──────────────────────────────────────
+  PTKN:    NEG    # negation particle → MHDBDB NEG
+  PTKNEG:  NEG    # negation particle (explicit)
+  PTKA:    ADV    # adverbial particle (too, very)
+  PTKV:    ADV    # verbal particle (separable prefix)
+  PTKVZ:   ADV    # verbal particle, separated
+
+  # ── Verbs ──────────────────────────────────────────
+  # Full verbs → VRB
+  VVFIN:   VRB    # full verb, finite
+  VVIMP:   VRB    # full verb, imperative
+  VVINF:   VRB    # full verb, infinitive
+  VVPP:    VRB    # full verb, past participle
+  VVPS:    VRB    # full verb, present participle
+
+  # Auxiliaries → VEX
+  # NOTE: HiTS always marks auxiliaries as VA*, but MHDBDB distinguishes
+  # VRB vs VEX contextually (copula = VRB, with participle = VEX).
+  # This mapping overcounts VEX — documented limitation.
+  VAFIN:   VEX    # auxiliary, finite
+  VAIMP:   VEX    # auxiliary, imperative
+  VAINF:   VEX    # auxiliary, infinitive
+  VAPP:    VEX    # auxiliary, past participle
+  VAPS:    VEX    # auxiliary, present participle
+
+  # Modals → VEM
+  VMFIN:   VEM    # modal, finite
+  VMIMP:   VEM    # modal, imperative
+  VMINF:   VEM    # modal, infinitive
+  VMPP:    VEM    # modal, past participle
+  VMPS:    VEM    # modal, present participle
+
+  # ── Conjunctions ───────────────────────────────────
+  KON:     CCNJ   # coordinating conjunction (und, oder, aber)
+  KOUS:    SCNJ   # subordinating conjunction with finite verb (daz, ob)
+  KOUI:    SCNJ   # subordinating conjunction with infinitive (umbe...ze)
+  KOKOM:   ADV    # comparative conjunction (als, wie) → MHDBDB ADV per SKILL.md rules
+
+  # ── Cardinals ──────────────────────────────────────
+  CARD:    NUM    # cardinal number
+
+  # ── Interjections ──────────────────────────────────
+  ITJ:     INJ    # interjection
+
+  # ── Foreign Material ───────────────────────────────
+  FM:      null   # foreign material → no MHDBDB equivalent, exclude
+
+  # ── Punctuation / Symbols ──────────────────────────
+  "$,":    null   # comma
+  "$.":    null   # sentence-final punctuation
+  "$(":    null   # other punctuation/brackets
+  "$;":    null   # semicolon
+  "$:":    null   # colon
+
+  # ── Other ──────────────────────────────────────────
+  XY:      null   # non-word, special character
+  "--":    null   # untagged/missing
+
+# Tags requiring context-dependent mapping.
+# Phase 1 uses the default. Future phases may add context-sensitive resolution.
+ambiguous_mappings:
+  AVW:
+    note: "wie/wâ as interrogative → IPA in MHDBDB, as general adverb → ADV"
+    default: ADV
+    alternatives: [IPA]
+
+  PW:
+    note: "Interrogative pronoun → could be IPA (direct question) or PRO (relative/indefinite)"
+    default: PRO
+    alternatives: [IPA]
+
+  PWSUB:
+    note: "Same ambiguity as PW"
+    default: PRO
+    alternatives: [IPA]
+
+  ADJN:
+    note: "Nominalized adjective. MHDBDB tags as NOM if fully substantivized, ADJ otherwise"
+    default: ADJ
+    alternatives: [NOM]
+
+  APPRART:
+    note: "Fused preposition+article (e.g., 'zer' = ze+der). MHDBDB might use compound PRP DET"
+    default: PRP
+    alternatives: [PRP]
