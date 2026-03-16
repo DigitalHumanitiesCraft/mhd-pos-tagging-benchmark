@@ -2,7 +2,7 @@
 
 ## Project in One Paragraph
 
-Model-agnostic benchmark for Part-of-Speech tagging of Middle High German (MHG) texts. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) as ground truth with hand-annotated HiTS POS tags (73 tags in corpus). Maps HiTS → MHDBDB 19-tag tagset. Any POS tagger (LLM, encoder model, classical) can be evaluated via a pluggable adapter interface. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Built for a planned publication comparing models across technology categories.
+**Which model tags Middle High German POS best?** This benchmark answers that question by enabling direct head-to-head comparison of any POS tagger against a validated ground truth. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) with hand-annotated HiTS POS tags (73 tags), mapped to the MHDBDB 19-tag tagset. Technology-agnostic: the same adapter interface works for frontier LLMs (currently Gemini 3.1 Pro, Claude Opus 4.6), open-source models, encoder models, or classical taggers. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Before this benchmark, there was no way to objectively compare — the ground truth pipeline makes it possible.
 
 ## Team
 
@@ -16,7 +16,7 @@ The MHDBDB TEI repository (`../mhdbdb-tei-only/`) contains ~670 TEI-encoded MHG 
 
 ## Publication Context
 
-- **Paper:** Frontier LLMs vs. open-source/self-trained models for MHG POS tagging
+- **Paper:** Head-to-head comparison of POS taggers for MHG (models interchangeable, ground truth enables the comparison)
 - **DFG network application:** Benchmark serves as demonstrator
 - **Edition-matching problem:** Deferred — Michael to assign HiWi for philological review
 - **Next meeting:** 7.4.2026

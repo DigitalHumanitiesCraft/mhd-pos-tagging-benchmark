@@ -1,8 +1,10 @@
 # Requirements — MHD POS Tagging Benchmark
 
-## Project Goal
+## Research Question
 
-Systematically evaluate POS taggers for Middle High German against ReM ground truth. Serve as infrastructure for a publication comparing Frontier LLMs vs. open-source/self-trained models. Secondary use: demonstrator for DFG network application.
+**Which model tags Middle High German POS best?** Direct head-to-head comparison against validated ground truth (ReM). Models and technologies are interchangeable — the benchmark works for frontier LLMs (e.g., Gemini 3.1 Pro, Claude Opus 4.6), open-source LLMs, encoder models, classical taggers. What makes the comparison possible at all is the ground truth pipeline (ReM → HiTS → MHDBDB).
+
+Secondary use: demonstrator for DFG network application.
 
 ## Stakeholders
 

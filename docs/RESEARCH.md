@@ -2,9 +2,13 @@
 
 Academic context for the planned publication. This doc captures the research landscape so that Related Work sections and framing decisions have a traceable basis.
 
+## Research Question
+
+**Which model tags Middle High German POS best?** Until now, there was no way to answer this objectively. There are trained taggers (TreeTagger ~91%, spaCy MHG model) and a gold-standard corpus (ReM), but no benchmark that enables head-to-head comparison on the same data with the same metrics. This project builds that benchmark — technology-agnostic, so any tagger (frontier LLMs like Gemini 3.1 Pro or Claude Opus 4.6, encoder models, classical taggers) can compete on equal ground.
+
 ## Research Gap
 
-**No formal POS tagging benchmark for Middle High German exists.** There are trained taggers (TreeTagger, spaCy) and a gold-standard corpus (ReM), but no standardized evaluation framework that allows systematic comparison across model types — LLMs, encoder models, classical taggers — on the same data with the same metrics.
+The gap is not "MHG POS tagging is unsolved" — it's that **results aren't comparable**. Schulz & Ketschik (2019) report ~91% with TreeTagger, but on their own train/test split. The MHDBDB Gemini skill reports ~100% on normalized texts, but on MHDBDB data, not ReM. Without a shared ground truth and evaluation protocol, these numbers mean nothing relative to each other.
 
 ## Existing MHG POS Taggers
 
@@ -59,15 +63,13 @@ Full references:
 
 ## Our Contribution
 
-1. **First model-agnostic MHG POS tagging benchmark** — any tagger (LLM, encoder, classical) can be evaluated via adapter interface
-2. **Tagset bridge:** HiTS (73 tags) → MHDBDB (19 tags) mapping, empirically validated against full ReM v2.1
-3. **Systematic comparison** across technology categories, not just model families
-4. **Reproducible:** Pipeline code + documented methodology. ReM is freely available.
+1. **First MHG POS tagging benchmark with validated ground truth** — the ReM→HiTS→MHDBDB pipeline makes objective head-to-head comparison possible for the first time
+2. **Technology-agnostic:** same interface and metrics for frontier LLMs, encoder models, classical taggers — models come and go, the benchmark stays
+3. **Tagset bridge:** HiTS (73 tags) → MHDBDB (19 tags) mapping, empirically validated against full ReM v2.1 (2.58M tokens)
+4. **Reproducible:** Pipeline code + documented methodology. ReM is freely available (CC BY-SA 4.0).
 
-## Paper Framing Options
+## Paper Framing
 
-1. **"Benchmarking POS taggers for MHG"** — infrastructure paper, focus on the benchmark itself
-2. **"Can LLMs tag MHG?"** — empirical paper, focus on results
-3. **"Classical vs. neural vs. generative for historical NLP"** — comparative paper, three technology paradigms
+The core narrative: "We built the ground truth pipeline that makes comparison possible, then used it to compare." The specific models tested (currently Gemini 3.1 Pro, Claude Opus 4.6, ...) are examples — the contribution is the infrastructure, the results are the demonstration.
 
-Decision deferred until we have results from at least 3 models.
+Decision on exact framing deferred until we have results.
