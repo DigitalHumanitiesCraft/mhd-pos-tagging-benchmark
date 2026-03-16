@@ -14,7 +14,7 @@ pip install -e ".[dev]"
 mhd-bench parse ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --stats
 
 # Validate tagset mapping against actual data
-mhd-bench mapping --validate
+mhd-bench mapping --validate --corpus-dir ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/
 
 # Run pipeline sanity check (gold passthrough = 100% accuracy)
 mhd-bench evaluate --adapter passthrough
@@ -29,9 +29,12 @@ Download ReM v2.1 CORA-XML from [the official site](https://www.linguistics.rub.
 | Document | Content |
 |----------|---------|
 | [MHDBDB-TAGSET.md](docs/MHDBDB-TAGSET.md) | Target 19-tag tagset with functional distinctions |
+| [HITS-TAGSET.md](docs/HITS-TAGSET.md) | Source HiTS tagset — all 73 tags with corpus frequencies |
+| [TAGSET-MAPPING.md](docs/TAGSET-MAPPING.md) | HiTS → MHDBDB mapping rationale and gap analysis |
 | [CORA-XML-FORMAT.md](docs/CORA-XML-FORMAT.md) | ReM data format reference |
 | [OVERLAP-TABLE.md](docs/OVERLAP-TABLE.md) | ReM ↔ MHDBDB text overlap mapping |
 | [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | Full implementation plan |
+| [journal.md](docs/journal.md) | Decision log and process journal |
 
 ## License
 

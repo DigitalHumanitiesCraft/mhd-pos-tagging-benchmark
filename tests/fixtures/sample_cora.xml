@@ -1,0 +1,143 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE text SYSTEM "cora-xml.dtd">
+<text id="T001">
+  <header>
+    <title>Test Document</title>
+    <abbr_ddd>Test</abbr_ddd>
+    <abbr_mwb>-</abbr_mwb>
+    <topic>Test</topic>
+    <text-type>Test</text-type>
+    <genre>V</genre>
+    <language-area>oberdeutsch</language-area>
+    <date>13</date>
+    <text-author>-</text-author>
+    <annotation_by>Test</annotation_by>
+  </header>
+  <layoutinfo/>
+  <shifttags/>
+
+  <!-- Simple token: common noun -->
+  <token id="t1" trans="ritter" type="token">
+    <tok_dipl id="t1_d1" trans="ritter" utf="ritter"/>
+    <tok_anno id="t1_m1" ascii="ritter" trans="ritter" utf="ritter">
+      <norm tag="rîter"/>
+      <lemma tag="rîter"/>
+      <lemma_gen tag="rîter"/>
+      <lemma_idmwb tag="12345"/>
+      <pos tag="NA"/>
+      <pos_gen tag="NA"/>
+      <infl tag="Nom.Sg"/>
+      <inflClass tag="*.Masc"/>
+      <inflClass_gen tag="*.Masc"/>
+    </tok_anno>
+  </token>
+
+  <comment type="K">/R</comment>
+
+  <!-- Simple token: finite verb -->
+  <token id="t2" trans="reit" type="token">
+    <tok_dipl id="t2_d1" trans="reit" utf="reit"/>
+    <tok_anno id="t2_m1" ascii="reit" trans="reit" utf="reit">
+      <norm tag="reit"/>
+      <lemma tag="rîten"/>
+      <lemma_gen tag="rîten"/>
+      <lemma_idmwb tag="12346"/>
+      <pos tag="VVFIN"/>
+      <pos_gen tag="VV"/>
+      <infl tag="3.Sg.Prät.Ind"/>
+      <inflClass tag="st.1"/>
+      <inflClass_gen tag="st.1"/>
+    </tok_anno>
+  </token>
+
+  <!-- Simple token: preposition -->
+  <token id="t3" trans="in" type="token">
+    <tok_dipl id="t3_d1" trans="in" utf="in"/>
+    <tok_anno id="t3_m1" ascii="in" trans="in" utf="in">
+      <norm tag="in"/>
+      <lemma tag="in"/>
+      <lemma_gen tag="in"/>
+      <lemma_idmwb tag="12347"/>
+      <pos tag="APPR"/>
+      <pos_gen tag="AP"/>
+      <infl tag="--"/>
+      <inflClass tag="--"/>
+      <inflClass_gen tag="--"/>
+    </tok_anno>
+  </token>
+
+  <!-- Simple token: article/determiner -->
+  <token id="t4" trans="den" type="token">
+    <tok_dipl id="t4_d1" trans="den" utf="den"/>
+    <tok_anno id="t4_m1" ascii="den" trans="den" utf="den">
+      <norm tag="den"/>
+      <lemma tag="der"/>
+      <lemma_gen tag="der"/>
+      <lemma_idmwb tag="12348"/>
+      <pos tag="DDART"/>
+      <pos_gen tag="DD"/>
+      <infl tag="Akk.Sg.Masc"/>
+      <inflClass tag="--"/>
+      <inflClass_gen tag="--"/>
+    </tok_anno>
+  </token>
+
+  <!-- Simple token: common noun -->
+  <token id="t5" trans="walt" type="token">
+    <tok_dipl id="t5_d1" trans="walt" utf="walt"/>
+    <tok_anno id="t5_m1" ascii="walt" trans="walt" utf="walt">
+      <norm tag="walt"/>
+      <lemma tag="walt"/>
+      <lemma_gen tag="walt"/>
+      <lemma_idmwb tag="12349"/>
+      <pos tag="NA"/>
+      <pos_gen tag="NA"/>
+      <infl tag="Akk.Sg"/>
+      <inflClass tag="*.Masc"/>
+      <inflClass_gen tag="*.Masc"/>
+    </tok_anno>
+  </token>
+
+  <!-- Multi-mod token (clitic): "inder" = "in" + "der" -->
+  <token id="t6" trans="inder" type="token">
+    <tok_dipl id="t6_d1" trans="inder" utf="inder"/>
+    <tok_anno id="t6_m1" ascii="in" trans="in|" utf="in">
+      <norm tag="in"/>
+      <token_type tag="MS1"/>
+      <lemma tag="in"/>
+      <lemma_gen tag="in"/>
+      <pos tag="APPR"/>
+      <pos_gen tag="AP"/>
+      <infl tag="--"/>
+    </tok_anno>
+    <tok_anno id="t6_m2" ascii="der" trans="|der" utf="der">
+      <norm tag="der"/>
+      <token_type tag="MS2"/>
+      <lemma tag="der"/>
+      <lemma_gen tag="der"/>
+      <pos tag="DDART"/>
+      <pos_gen tag="DD"/>
+      <infl tag="Dat.Sg.Fem"/>
+    </tok_anno>
+  </token>
+
+  <!-- Token with punctuation POS (should be excluded) -->
+  <token id="t7" trans="." type="token">
+    <tok_dipl id="t7_d1" trans="." utf="."/>
+    <tok_anno id="t7_m1" ascii="." trans="." utf=".">
+      <pos tag="$_"/>
+      <pos_gen tag="$_"/>
+    </tok_anno>
+  </token>
+
+  <!-- Token with foreign material tag -->
+  <token id="t8" trans="amen" type="token">
+    <tok_dipl id="t8_d1" trans="amen" utf="amen"/>
+    <tok_anno id="t8_m1" ascii="amen" trans="amen" utf="amen">
+      <norm tag="amen"/>
+      <lemma tag="amen"/>
+      <pos tag="FM"/>
+      <pos_gen tag="FM"/>
+    </tok_anno>
+  </token>
+</text>

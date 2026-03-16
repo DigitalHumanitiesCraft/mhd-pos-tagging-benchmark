@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mhd-pos-benchmark"
+version = "0.1.0"
+description = "Model-agnostic benchmark for POS tagging of Middle High German texts against ReM ground truth"
+readme = "README.md"
+license = "CC-BY-NC-SA-4.0"
+requires-python = ">=3.13"
+authors = [
+    {name = "Christian", email = "christian@dhcraft.at"},
+    {name = "Michael"},
+    {name = "Katharina"},
+]
+dependencies = [
+    "lxml>=5.0",
+    "click>=8.1",
+    "pyyaml>=6.0",
+    "scikit-learn>=1.4",
+    "rich>=13.0",
+    "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+mhd-bench = "mhd_pos_benchmark.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100

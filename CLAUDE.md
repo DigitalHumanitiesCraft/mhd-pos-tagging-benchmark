@@ -2,7 +2,7 @@
 
 ## Project in One Paragraph
 
-Model-agnostic benchmark for Part-of-Speech tagging of Middle High German (MHG) texts. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) as ground truth with hand-annotated HiTS POS tags (~80 tags). Maps HiTS → MHDBDB 19-tag tagset. Any POS tagger (LLM or classical) can be evaluated via a pluggable adapter interface. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Built for a planned publication comparing Frontier LLMs vs. open-source models.
+Model-agnostic benchmark for Part-of-Speech tagging of Middle High German (MHG) texts. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) as ground truth with hand-annotated HiTS POS tags (73 tags in corpus). Maps HiTS → MHDBDB 19-tag tagset. Any POS tagger (LLM or classical) can be evaluated via a pluggable adapter interface. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Built for a planned publication comparing Frontier LLMs vs. open-source models.
 
 ## Team
 
@@ -34,6 +34,8 @@ Reference that project for tagset definitions, disambiguation heuristics, and kn
 - **Format:** CORA-XML (NOT standard TEI) — see `docs/CORA-XML-FORMAT.md`
 - **Download:** https://www.linguistics.rub.de/rem/access/index.html (CORA-XML, 106 MB)
 - **Also available:** TEI format (`ReM-v2.1_tei/`), JSON (`ReM-v2.1_json/`)
+- **Citation:** Roussel, Adam; Klein, Thomas; Dipper, Stefanie; Wegera, Klaus-Peter; Wich-Reif, Claudia (2024). Referenzkorpus Mittelhochdeutsch (1050–1350), Version 2.1, https://www.linguistics.ruhr-uni-bochum.de/rem/. ISLRN 937-948-254-174-0.
+- **ReM License:** CC BY-SA 4.0 (benchmark code is CC BY-NC-SA 4.0)
 
 ## Commands
 
@@ -41,7 +43,7 @@ Reference that project for tagset definitions, disambiguation heuristics, and kn
 pip install -e ".[dev]"              # Install with dev dependencies
 pytest                                # Run tests
 mhd-bench parse ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --stats    # Parse + stats
-mhd-bench mapping --validate          # Check all HiTS tags have mappings
+mhd-bench mapping --validate --corpus-dir ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/  # Check all HiTS tags have mappings
 mhd-bench evaluate --adapter passthrough   # Pipeline sanity check (should be 100%)
 ```
 

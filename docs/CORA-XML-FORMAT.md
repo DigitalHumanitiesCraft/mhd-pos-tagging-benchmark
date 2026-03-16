@@ -3,6 +3,8 @@
 Reference for parsing ReM (Referenzkorpus Mittelhochdeutsch) CORA-XML files.
 
 **Source:** https://www.linguistics.rub.de/rem/access/index.html
+**Citation:** Roussel, Adam; Klein, Thomas; Dipper, Stefanie; Wegera, Klaus-Peter; Wich-Reif, Claudia (2024). Referenzkorpus Mittelhochdeutsch (1050–1350), Version 2.1. ISLRN 937-948-254-174-0.
+**License:** CC BY-SA 4.0
 
 ## File Structure
 
@@ -110,10 +112,31 @@ When a written form contains multiple words (e.g., "inalten" = "in" + "alten"):
 | `<date>` | ca. 1180-1210 | Dating |
 | `<annotation_by>` | Wiebke Wolf (Bonn) | Annotator provenance |
 
+## POS Tag Suffix System (Empirically Validated)
+
+The `<pos>` tags use a functional suffix system for determiners, cardinals, and pronominal adverbs. This is more extensive than what Dipper et al. 2013 documents.
+
+| Suffix | Function | Example |
+|--------|----------|---------|
+| `A` | attributiv (modifies noun) | `DDA` = demonstrative det., attr. |
+| `S` | substituierend (replaces noun) | `DDS` = demonstrative, subst. |
+| `D` | adverbial | `DDD` = demonstrative, adverbial |
+| `N` | nominalisiert | `DDN` = demonstrative, nominalized |
+| `ART` | article use | `DDART` = dem. det. as article |
+
+Applies to: `DD*`, `DI*`, `DPOS*`, `DREL*`, `DW*`, `DG*`, `CARD*`, `PAV*`
+
+Does **not** apply to: verbs (use FIN/INF/PP/IMP/PS), adjectives (use A/D/S/N but different semantics), nouns, pronouns.
+
+See [HITS-TAGSET.md](HITS-TAGSET.md) for the complete inventory with corpus frequencies.
+
 ## Important Notes
 
 1. **Element names differ from CORA-XML docs:** Actual files use `tok_anno` (not `mod`) and `tok_dipl` (not `dipl`)
 2. **Two POS layers:** `<pos>` is instance-level (fine: DDART, APPR, ADJA), `<pos_gen>` is generalized (coarse: DD, AP, ADJ). **Use `<pos>` for evaluation.**
 3. **`<comment>` elements** between tokens are structural markers (e.g., `/R` for line breaks). Skip them.
 4. **Entity encoding:** `&lt;` `&gt;` in `trans` attributes (e.g., `Nib&lt;e&gt;lungen`). The `utf` attribute has the decoded form.
-5. **407 files** in ReM v2.1 CORA-XML corpus.
+5. **406 parseable files** in ReM v2.1 CORA-XML corpus (407 in directory).
+6. **`$_` is the dominant punctuation tag** (286k occurrences). The HiTS-documented variants `$.`, `$,`, `$(` etc. do not appear in ReM v2.1.
+7. **`--` means untagged** (122k tokens). These have no POS annotation and are excluded from evaluation.
+8. **`KO*` / `AVD-KO*`** — asterisk marks ambiguous annotation (22k + 500 tokens). Resolution strategy TBD.

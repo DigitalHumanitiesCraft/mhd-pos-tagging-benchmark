@@ -1,6 +1,6 @@
 # HiTS → MHDBDB Tagset Mapping
 #
-# Maps HiTS POS tags (~80 tags, used by ReM) to MHDBDB POS tags (19 tags).
+# Maps 73 HiTS POS tags (as used in ReM v2.1) to 19 MHDBDB POS tags.
 # This is the single source of truth for tagset conversion in the benchmark.
 #
 # Convention:
@@ -8,133 +8,146 @@
 #   tag   = direct mapping to MHDBDB tag
 #
 # Sources:
-#   HiTS: Dipper et al. 2013, "HiTS: ein Tagset für historische Sprachstufen des Deutschen"
+#   HiTS: Dipper et al. 2013, JLCL 28(1), S. 85–137
 #   MHDBDB: mhdbdb-tei-only/.gemini/skills/pos-disambiguator/SKILL.md
+#   Suffix system confirmed by Katharina (2026-03-16)
 #
-# IMPORTANT: This is a DRAFT based on documentation. Must be validated against
-# actual ReM data with `mhd-bench mapping --validate`.
+# Suffix system: A=attributiv, S=substituierend, D=adverbial, N=nominalisiert
 #
 # Last updated: 2026-03-16
+# Validated against: ReM v2.1 (406 docs, 2,579,276 tokens, 73 unique tags)
 
-version: "0.1.0"
+version: "0.2.0"
 source_tagset: "HiTS"
 target_tagset: "MHDBDB"
 
 mappings:
   # ── Nouns ──────────────────────────────────────────
-  NA:      NOM    # Appellativum (common noun)
-  NE:      NAM    # Eigenname (proper noun)
+  NA:      NOM    # common noun (387,767)
+  NE:      NAM    # proper noun (52,593)
 
   # ── Adjectives ─────────────────────────────────────
-  ADJA:    ADJ    # attributive adjective
-  ADJD:    ADJ    # predicative/adverbial adjective
-  ADJN:    ADJ    # nominalized adjective (could be NOM — see ambiguous_mappings)
-  ADJS:    ADJ    # adjective, other
+  ADJA:    ADJ    # attributive adjective (61,846)
+  ADJD:    ADJ    # predicative/adverbial adjective (29,626)
+  ADJS:    ADJ    # other adjective (14,989)
+  ADJN:    ADJ    # nominalized adjective (5,392) — could be NOM, default ADJ
+  ADJ:     ADJ    # bare base tag (2) — annotation artifact
 
   # ── Adverbs ────────────────────────────────────────
-  AVD:     ADV    # demonstrative adverb (dâ, hie)
-  AVG:     ADV    # general adverb
-  AVW:     ADV    # interrogative adverb (wâ, wie — could be IPA, see ambiguous_mappings)
-  AVNEG:   NEG    # negative adverb (nie, niemer)
-  AVD-KO:  ADV    # comparative demonstrative adverb
+  AVD:     ADV    # demonstrative adverb: dâ, hie, sô (159,727)
+  AVW:     ADV    # interrogative adverb: wâ, wie (5,211) — could be IPA, default ADV
+  AVG:     ADV    # general adverb (2,811)
 
-  # ── Determiners (HiTS "D" category) ────────────────
-  # HiTS separates D and P; MHDBDB uses DET for attributive, PRO for substitutive
-  DD:      DET    # demonstrative determiner
-  DDART:   DET    # demonstrative determiner used as article (der, diu, daz)
-  DDSUB:   DET    # demonstrative determiner, other
-  DI:      DET    # indefinite determiner (ein)
-  DIART:   DET    # indefinite article
-  DISUB:   DET    # indefinite determiner, other
-  DG:      POS    # possessive determiner → MHDBDB POS (morphologically distinct)
-  DGPOS:   POS    # possessive determiner (explicit)
-  DGSUB:   POS    # possessive determiner, other
-  DP:      DET    # demonstrative/other determiner
-  DW:      DET    # interrogative/relative determiner (welch)
-  DWSUB:   DET    # interrogative determiner, other
+  # ── Determiners: Demonstrative (DD) ────────────────
+  DDART:   DET    # article use: der, diu, daz (149,086)
+  DDA:     DET    # attributiv: diser, selbe (13,383)
+  DDS:     PRO    # substituierend: des, daz standalone (46,155)
+  DDD:     ADV    # adverbial: selbe (1,036)
+  DDN:     PRO    # nominalisiert: selbe as noun (287)
+
+  # ── Determiners: Indefinite (DI) ───────────────────
+  DIA:     DET    # attributiv: ein, manig, iegelich (29,766)
+  DIART:   DET    # article use: ein (20,382)
+  DIS:     PRO    # substituierend: al, manic, beide (7,181)
+  DID:     ADV    # adverbial: alle besunder (2,034)
+  DIN:     PRO    # nominalisiert: alle, ander (1,299)
+
+  # ── Determiners: Possessive (DPOS) ─────────────────
+  DPOSA:   POS    # attributiv: mîn, dîn, unser (60,599)
+  DPOSN:   POS    # nominalisiert (6,156)
+  DPOSS:   POS    # substituierend (705)
+  DPOSD:   POS    # adverbial: du bist min (60) — stays POS per Katharina
+
+  # ── Determiners: Relative (DREL) ───────────────────
+  DRELS:   PRO    # substituierend: der/daz as relative pronoun (26,784)
+
+  # ── Determiners: Interrogative (DW) ────────────────
+  DWA:     DET    # attributiv: welch- (481)
+  DWS:     PRO    # substituierend (151)
+  DWD:     ADV    # adverbial (20)
+
+  # ── Determiners: Generalized (DG = swelch-) ────────
+  DGA:     DET    # attributiv: swelch- before noun (507) — confirmed by Katharina
+  DGS:     PRO    # substituierend: swelch- standalone (173) — confirmed by Katharina
 
   # ── Pronouns ───────────────────────────────────────
-  PPER:    PRO    # personal pronoun (ich, du, er)
-  PRF:     PRO    # reflexive pronoun (sich)
-  PI:      PRO    # indefinite pronoun
-  PISUB:   PRO    # indefinite pronoun, substitutive
-  PG:      PRO    # possessive pronoun (standalone, not before noun)
-  PGSUB:   PRO    # possessive pronoun, substitutive
-  PW:      PRO    # interrogative/relative pronoun (wer, waz — could be IPA)
-  PWSUB:   PRO    # interrogative pronoun, substitutive
-  PD:      PRO    # demonstrative pronoun (der/daz standalone)
-  PDSUB:   PRO    # demonstrative pronoun, substitutive
-  PPRO:    PRO    # generic pronoun category
+  PPER:    PRO    # personal pronoun: ich, du, er (211,312)
+  PRF:     PRO    # reflexive pronoun: sich (10,892)
+  PI:      PRO    # indefinite pronoun (7,366)
+  PW:      PRO    # interrogative/relative pronoun: wer, waz (3,997) — could be IPA
+  PG:      PRO    # possessive pronoun standalone (3,979)
 
-  # ── Adpositions ────────────────────────────────────
-  APPR:    PRP    # preposition
-  APPO:    PRP    # postposition
-  APZR:    PRP    # circumposition (right part)
-  APPRART: PRP    # preposition fused with article (could be PRP DET compound)
+  # ── Prepositions ───────────────────────────────────
+  APPR:    PRP    # preposition (163,421)
+
+  # ── Pronominal Adverbs (PAV) ───────────────────────
+  PAVAP:   ADV    # prepositional: dâvon, dâmite (16,809)
+  PAVD:    ADV    # demonstrative: dâr+Präp (16,262)
+  PAVW:    ADV    # interrogative: wâr+Präp (472) — ADV not IPA, lexical adverbs
+  PAVG:    ADV    # generalized: swâr+Präp (23)
 
   # ── Particles ──────────────────────────────────────
-  PTKN:    NEG    # negation particle → MHDBDB NEG
-  PTKNEG:  NEG    # negation particle (explicit)
-  PTKA:    ADV    # adverbial particle (too, very)
-  PTKV:    ADV    # verbal particle (separable prefix)
-  PTKVZ:   ADV    # verbal particle, separated
+  PTKNEG:  NEG    # negation particle: niht, ne, en (25,111)
+  PTKVZ:   ADV    # separated verbal particle (13,992)
+  PTKA:    ADV    # adverbial particle (989)
+  PTKANT:  INJ    # answer particle: jâ, nein (349) — confirmed by Katharina
 
-  # ── Verbs ──────────────────────────────────────────
-  # Full verbs → VRB
-  VVFIN:   VRB    # full verb, finite
-  VVIMP:   VRB    # full verb, imperative
-  VVINF:   VRB    # full verb, infinitive
-  VVPP:    VRB    # full verb, past participle
-  VVPS:    VRB    # full verb, present participle
+  # ── Verbs: Full (VV) ──────────────────────────────
+  VVFIN:   VRB    # finite (159,470)
+  VVINF:   VRB    # infinitive (47,228)
+  VVPP:    VRB    # past participle (43,503)
+  VVIMP:   VRB    # imperative (12,602)
+  VVPS:    VRB    # present participle (1,687)
+  VV:      VRB    # bare base tag (2) — annotation artifact
 
-  # Auxiliaries → VEX
-  # NOTE: HiTS always marks auxiliaries as VA*, but MHDBDB distinguishes
-  # VRB vs VEX contextually (copula = VRB, with participle = VEX).
-  # This mapping overcounts VEX — documented limitation.
-  VAFIN:   VEX    # auxiliary, finite
-  VAIMP:   VEX    # auxiliary, imperative
-  VAINF:   VEX    # auxiliary, infinitive
-  VAPP:    VEX    # auxiliary, past participle
-  VAPS:    VEX    # auxiliary, present participle
+  # ── Verbs: Auxiliary (VA) ──────────────────────────
+  # NOTE: VA* → VEX overcounts. HiTS doesn't distinguish copula (VRB)
+  # from auxiliary (VEX). Documented limitation.
+  VAFIN:   VEX    # finite (87,282)
+  VAINF:   VEX    # infinitive (7,283)
+  VAPP:    VEX    # past participle (1,019)
+  VAIMP:   VEX    # imperative (536)
+  VAPS:    VEX    # present participle (35)
 
-  # Modals → VEM
-  VMFIN:   VEM    # modal, finite
-  VMIMP:   VEM    # modal, imperative
-  VMINF:   VEM    # modal, infinitive
-  VMPP:    VEM    # modal, past participle
-  VMPS:    VEM    # modal, present participle
+  # ── Verbs: Modal (VM) ─────────────────────────────
+  VMFIN:   VEM    # finite (43,359)
+  VMINF:   VEM    # infinitive (73)
+  VMIMP:   VEM    # imperative (52)
+  VMPP:    VEM    # past participle (3)
+  VMPS:    VEM    # present participle (2)
 
   # ── Conjunctions ───────────────────────────────────
-  KON:     CCNJ   # coordinating conjunction (und, oder, aber)
-  KOUS:    SCNJ   # subordinating conjunction with finite verb (daz, ob)
-  KOUI:    SCNJ   # subordinating conjunction with infinitive (umbe...ze)
-  KOKOM:   ADV    # comparative conjunction (als, wie) → MHDBDB ADV per SKILL.md rules
+  KON:     CCNJ   # coordinating: und, oder, aber (93,916)
+  KOUS:    SCNJ   # subordinating: daz, ob (43,728)
+  KOKOM:   ADV    # comparative particle: als, wie (2,027)
+  "KO*":   null   # ambiguous conjunction (22,473) — context-dependent, excluded Phase 1
 
   # ── Cardinals ──────────────────────────────────────
-  CARD:    NUM    # cardinal number
+  CARDA:   NUM    # attributiv (11,401)
+  CARDS:   NUM    # substituierend (3,062)
+  CARDN:   NUM    # nominalisiert (151)
+  CARDD:   NUM    # adverbial (114)
 
   # ── Interjections ──────────────────────────────────
-  ITJ:     INJ    # interjection
+  ITJ:     INJ    # interjection (2,409)
 
   # ── Foreign Material ───────────────────────────────
-  FM:      null   # foreign material → no MHDBDB equivalent, exclude
+  FM:      null   # foreign material (26,163)
 
-  # ── Punctuation / Symbols ──────────────────────────
-  "$,":    null   # comma
-  "$.":    null   # sentence-final punctuation
-  "$(":    null   # other punctuation/brackets
-  "$;":    null   # semicolon
-  "$:":    null   # colon
+  # ── Punctuation ────────────────────────────────────
+  "$_":    null   # punctuation (286,202)
 
-  # ── Other ──────────────────────────────────────────
-  XY:      null   # non-word, special character
-  "--":    null   # untagged/missing
+  # ── Comparative Adverb (ambiguous) ─────────────────
+  "AVD-KO*": ADV  # comparative demonstrative adverb (503)
+
+  # ── Untagged ───────────────────────────────────────
+  "--":    null   # untagged / missing annotation (121,808)
 
 # Tags requiring context-dependent mapping.
 # Phase 1 uses the default. Future phases may add context-sensitive resolution.
 ambiguous_mappings:
   AVW:
-    note: "wie/wâ as interrogative → IPA in MHDBDB, as general adverb → ADV"
+    note: "wie/wâ as interrogative → IPA, as general adverb → ADV"
     default: ADV
     alternatives: [IPA]
 
@@ -143,17 +156,12 @@ ambiguous_mappings:
     default: PRO
     alternatives: [IPA]
 
-  PWSUB:
-    note: "Same ambiguity as PW"
-    default: PRO
-    alternatives: [IPA]
-
   ADJN:
     note: "Nominalized adjective. MHDBDB tags as NOM if fully substantivized, ADJ otherwise"
     default: ADJ
     alternatives: [NOM]
 
-  APPRART:
-    note: "Fused preposition+article (e.g., 'zer' = ze+der). MHDBDB might use compound PRP DET"
-    default: PRP
-    alternatives: [PRP]
+  "KO*":
+    note: "Ambiguous conjunction — could be SCNJ, CCNJ, or ADV. Excluded in Phase 1, context-sensitive in Phase 2"
+    default: null
+    alternatives: [SCNJ, CCNJ, ADV]

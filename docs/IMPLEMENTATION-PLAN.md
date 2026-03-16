@@ -4,7 +4,7 @@
 
 The MHDBDB project has developed a Gemini-based POS disambiguation skill for Middle High German texts (19-tag MHDBDB tagset). The team (Michael, Christian, Katharina) plans a publication comparing Frontier LLMs vs. open-source models for MHG POS tagging and needs systematic evaluation against a gold standard.
 
-**Ground truth:** The ReM (Referenzkorpus Mittelhochdeutsch) provides hand-annotated POS tags using the HiTS tagset (~80 tags). CORA-XML data is freely downloadable. ~25 MHDBDB texts overlap with ReM (mostly epic genre).
+**Ground truth:** The ReM (Referenzkorpus Mittelhochdeutsch) provides hand-annotated POS tags using the HiTS tagset (73 tags). CORA-XML data is freely downloadable. ~25 MHDBDB texts overlap with ReM (mostly epic genre).
 
 **Goal:** A standalone, model-agnostic benchmark repository that can evaluate any POS tagger against ReM ground truth, with accuracy/F1/confusion metrics broken down by tag, text, and genre.
 
@@ -38,7 +38,7 @@ Export the full 19-tag tagset from SKILL.md including:
 - "ART" is NOT a valid tag
 
 ### docs/HITS-TAGSET.md
-HiTS tagset reference (~80 tags):
+HiTS tagset reference (73 tags):
 - Full category hierarchy (ADJ*, AP*, AV*, CARD, D*, P*, PTK*, V*, N*, ITJ, FM, $)
 - Key distinction: HiTS separates Determiners (D) and Pronouns (P) as main classes
 - Dual annotation: lemma-related + instance-related tags
@@ -63,18 +63,18 @@ Katharina's complete mapping table (from her email):
 
 ### docs/CORA-XML-FORMAT.md
 CORA-XML structure reference:
-- `<token>` → `<dipl>` (diplomatic) + `<mod>` (modernized) layers
-- POS tags on `<mod>`: `<pos tag="VVFIN"/>`
-- Lemma on `<mod>`: `<lemma tag="sollen"/>`
-- Multi-mod tokens (clitics): "soltu" → 2 mods ("solt" VVFIN + "u" PPER)
-- Metadata in `<cora-header>` attributes
+- `<token>` → `<tok_dipl>` (diplomatic) + `<tok_anno>` (modernized/annotated) layers
+- POS tags on `<tok_anno>`: `<pos tag="VVFIN"/>`
+- Lemma on `<tok_anno>`: `<lemma tag="sollen"/>`
+- Multi-tok_anno tokens (clitics): "soltu" → 2 tok_anno ("solt" VVFIN + "u" PPER)
+- Metadata in `<header>` child elements
 - Download: https://www.linguistics.rub.de/rem/access/index.html (CORA-XML, 106 MB)
 
 ### docs/IMPLEMENTATION-PLAN.md
 This plan file, adapted for the new repo context.
 
 ### hits_to_mhdbdb.yaml (draft)
-The full YAML tagset mapping from the Plan agent's output — ~80 entries with comments. This is the single most critical artifact to carry over.
+The full YAML tagset mapping from the Plan agent's output — 73 entries with comments. This is the single most critical artifact to carry over.
 
 ### Meeting context (→ CLAUDE.md or memory)
 - Meeting 9.3.2026: Michael, Christian, Katharina agreed on ReM as ground truth
@@ -189,14 +189,14 @@ class Document:
 ```
 
 ### Step 3: CORA-XML parser (`rem_parser.py`)
-- Parse `<token>` → `<mod>` elements (modernized layer, where POS tags live)
-- One `<mod>` with `<pos tag="..."/>` = one Token
-- Handle multi-mod tokens (clitics: "soltu" → "solt" + "u" = 2 tokens)
-- Extract metadata from `<cora-header>` attributes
-- **Key:** Use `<mod>` layer, not `<dipl>` — POS tags live on mod
+- Parse `<token>` → `<tok_anno>` elements (annotated layer, where POS tags live)
+- One `<tok_anno>` with `<pos tag="..."/>` = one Token
+- Handle multi-tok_anno tokens (clitics: "soltu" → "solt" + "u" = 2 tokens)
+- Extract metadata from `<header>` child elements
+- **Key:** Use `<tok_anno>` layer, not `<tok_dipl>` — POS tags live on tok_anno
 
 ### Step 4: Tagset mapping (`hits_to_mhdbdb.yaml` + `tagset_mapper.py`)
-- YAML file with ~80 HiTS → 19 MHDBDB mappings
+- YAML file with 73 HiTS → 19 MHDBDB mappings
 - `null` = unmappable (FM, punctuation) → excluded from eval
 - `ambiguous_mappings` section documents context-dependent cases with defaults
 - Key mappings:

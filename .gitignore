@@ -2,7 +2,7 @@
 ReM-v2.1_coraxml/
 ReM-v2.1_tei/
 ReM-v2.1_json/
-data/
+/data/
 
 # Benchmark results (local)
 results/
