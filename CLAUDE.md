@@ -6,9 +6,9 @@ Model-agnostic benchmark for Part-of-Speech tagging of Middle High German (MHG) 
 
 ## Team
 
-- **Michael** — University of Salzburg, MHDBDB project lead, medieval German studies
+- **Michael** — TU Darmstadt, professor, medieval German studies
 - **Christian** — DHCraft OG, technical lead, builds the benchmark tooling
-- **Katharina** — Ruhr-Universität Bochum, computational linguistics, ReM expertise
+- **Katharina** — University of Salzburg, MHDBDB project lead, computational linguistics, ReM expertise
 
 ## Sibling Project
 

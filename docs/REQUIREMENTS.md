@@ -8,9 +8,9 @@ Systematically evaluate POS taggers for Middle High German against ReM ground tr
 
 | Who | Needs | Validates |
 |-----|-------|-----------|
-| **Michael** (MHDBDB lead) | Publishable results, MHDBDB tagset accuracy | Linguistic plausibility, paper narrative |
-| **Christian** (tech lead) | Reliable tooling, reproducible runs | Pipeline correctness, code quality |
-| **Katharina** (ReM/CL) | Correct tagset mapping, corpus handling | Mapping decisions, ReM-specific edge cases |
+| **Michael** (professor, TU Darmstadt) | Publishable results, paper narrative | Linguistic plausibility, methodology |
+| **Christian** (tech lead, DHCraft) | Reliable tooling, reproducible runs | Pipeline correctness, code quality |
+| **Katharina** (MHDBDB lead, Salzburg) | MHDBDB tagset accuracy, correct mapping, corpus handling | Mapping decisions, ReM-specific edge cases |
 | **Paper reviewers** | Transparent methodology, reproducibility | Metrics, corpus description, limitations section |
 
 ## Epics
