@@ -145,9 +145,10 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 
 **Next steps:**
 1. Run `mhd-bench evaluate` with passthrough on full corpus — must be 100%
-2. Small subset test on overlap texts (morgen geplant)
+2. Small subset test on overlap texts (2026-03-17 geplant)
 3. Build first real adapter
 4. Decide diplomatic vs. modernized forms for LLM input
 5. Verify RESEARCH.md citations before paper writing
+6. Add GitHub contributors: `michaelscho` (Michael) and `wachauer` (Katharina) to repo
 
-**Git:** 5 commits on main, last `5ba386a`, pushed to origin.
+**Git:** 6 commits on main, last `170ef57`, pushed to origin.
