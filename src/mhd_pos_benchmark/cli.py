@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import click
@@ -9,6 +10,51 @@ from rich.console import Console
 from rich.table import Table
 
 console = Console()
+
+ADAPTER_CHOICES = ["passthrough", "majority", "gemini"]
+
+
+def _parse_and_map(corpus_dir: Path, subset: int | None = None):
+    """Shared helper: parse corpus, map tags, optionally select subset."""
+    from mhd_pos_benchmark.data.rem_parser import parse_corpus
+    from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
+
+    console.print(f"Parsing corpus from {corpus_dir}...")
+    documents = parse_corpus(corpus_dir)
+    console.print(f"Parsed {len(documents)} documents")
+
+    mapper = TagsetMapper()
+    for doc in documents:
+        mapper.map_document(doc)
+
+    if subset:
+        from mhd_pos_benchmark.data.subset import describe_subset, select_subset
+
+        documents = select_subset(documents, n=subset)
+        console.print(f"\n[bold]Subset selected:[/bold]")
+        console.print(describe_subset(documents))
+
+    return documents
+
+
+def _make_adapter(name: str, documents):
+    """Instantiate an adapter by name."""
+    if name == "passthrough":
+        from mhd_pos_benchmark.adapters.gold_passthrough import GoldPassthroughAdapter
+
+        return GoldPassthroughAdapter()
+    elif name == "majority":
+        from mhd_pos_benchmark.adapters.majority_class import MajorityClassAdapter
+
+        adapter = MajorityClassAdapter(documents)
+        console.print(f"Majority tag: [bold]{adapter.majority_tag}[/bold]")
+        return adapter
+    elif name == "gemini":
+        from mhd_pos_benchmark.adapters.gemini import GeminiAdapter
+
+        return GeminiAdapter()
+    else:
+        raise click.UsageError(f"Unknown adapter: {name}")
 
 
 @click.group()
@@ -39,7 +85,6 @@ def parse(corpus_dir: Path, stats: bool) -> None:
             f"{total_tokens / len(documents):.0f}" if documents else "0",
         )
 
-        # POS tag distribution
         pos_counts: dict[str, int] = {}
         for doc in documents:
             for token in doc.tokens:
@@ -48,7 +93,6 @@ def parse(corpus_dir: Path, stats: bool) -> None:
         table.add_row("Unique HiTS tags", str(len(pos_counts)))
         console.print(table)
 
-        # Top tags
         tag_table = Table(title="\nTop 20 HiTS Tags")
         tag_table.add_column("Tag", style="bold")
         tag_table.add_column("Count", justify="right")
@@ -67,7 +111,7 @@ def parse(corpus_dir: Path, stats: bool) -> None:
 )
 @click.option("--validate", is_flag=True, help="Check all corpus tags have mappings")
 def mapping(corpus_dir: Path | None, validate: bool) -> None:
-    """Show or validate the HiTS → MHDBDB tagset mapping."""
+    """Show or validate the HiTS -> MHDBDB tagset mapping."""
     from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
 
     mapper = TagsetMapper()
@@ -89,8 +133,7 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
         else:
             console.print("[green]All HiTS tags in corpus have mappings.[/green]")
     else:
-        # Show mapping table
-        table = Table(title="HiTS → MHDBDB Mapping")
+        table = Table(title="HiTS -> MHDBDB Mapping")
         table.add_column("HiTS", style="bold")
         table.add_column("MHDBDB")
         for hits, mhdbdb in sorted(mapper.mappings.items()):
@@ -102,9 +145,15 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
 @click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--adapter",
-    type=click.Choice(["passthrough"]),
+    type=click.Choice(ADAPTER_CHOICES),
     default="passthrough",
     help="Model adapter to use",
+)
+@click.option(
+    "--subset",
+    type=int,
+    default=None,
+    help="Evaluate on N representative documents (for prototyping)",
 )
 @click.option(
     "--output",
@@ -112,39 +161,120 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     default=None,
     help="Save JSON results to this path",
 )
-def evaluate(corpus_dir: Path, adapter: str, output: Path | None) -> None:
+@click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
+def evaluate(
+    corpus_dir: Path, adapter: str, subset: int | None, output: Path | None, verbose: bool
+) -> None:
     """Run evaluation pipeline on the corpus."""
-    from mhd_pos_benchmark.adapters.gold_passthrough import GoldPassthroughAdapter
-    from mhd_pos_benchmark.data.rem_parser import parse_corpus
     from mhd_pos_benchmark.evaluation.comparator import align_corpus
     from mhd_pos_benchmark.evaluation.metrics import compute_metrics
     from mhd_pos_benchmark.evaluation.report import print_report, save_json
-    from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
 
-    # Parse
-    console.print(f"Parsing corpus from {corpus_dir}...")
-    documents = parse_corpus(corpus_dir)
-    console.print(f"Parsed {len(documents)} documents")
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
 
-    # Map
-    mapper = TagsetMapper()
-    for doc in documents:
-        mapper.map_document(doc)
+    documents = _parse_and_map(corpus_dir, subset)
+    model = _make_adapter(adapter, documents)
 
-    # Select adapter
-    if adapter == "passthrough":
-        model = GoldPassthroughAdapter()
-    else:
-        raise click.UsageError(f"Unknown adapter: {adapter}")
-
-    # Evaluate
-    console.print(f"Running evaluation with adapter: {model.name}...")
+    console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
     alignments = align_corpus(documents, model)
     result = compute_metrics(alignments, model.name)
 
-    # Report
     print_report(result, console)
 
     if output:
         save_json(result, output)
         console.print(f"\nResults saved to {output}")
+
+
+@cli.command()
+@click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--adapters",
+    type=str,
+    required=True,
+    help="Comma-separated adapter names to compare (e.g. 'majority,gemini')",
+)
+@click.option(
+    "--subset",
+    type=int,
+    default=None,
+    help="Evaluate on N representative documents",
+)
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Save JSON comparison to this path",
+)
+@click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
+def compare(
+    corpus_dir: Path, adapters: str, subset: int | None, output: Path | None, verbose: bool
+) -> None:
+    """Compare multiple adapters side-by-side."""
+    import json
+
+    from mhd_pos_benchmark.evaluation.comparator import align_corpus
+    from mhd_pos_benchmark.evaluation.metrics import EvaluationResult, compute_metrics
+    from mhd_pos_benchmark.evaluation.report import print_report, save_json
+
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
+
+    adapter_names = [a.strip() for a in adapters.split(",")]
+    documents = _parse_and_map(corpus_dir, subset)
+
+    results: list[EvaluationResult] = []
+    for name in adapter_names:
+        model = _make_adapter(name, documents)
+        console.print(f"\nRunning: [bold]{model.name}[/bold]...")
+        alignments = align_corpus(documents, model)
+        result = compute_metrics(alignments, model.name)
+        results.append(result)
+        print_report(result, console)
+
+    # Side-by-side summary
+    console.print("\n[bold]Comparison Summary[/bold]\n")
+    cmp_table = Table(title="Head-to-Head")
+    cmp_table.add_column("Metric", style="bold")
+    for r in results:
+        cmp_table.add_column(r.adapter_name, justify="right")
+
+    cmp_table.add_row("Accuracy", *[f"{r.accuracy:.4f}" for r in results])
+    cmp_table.add_row("Macro-F1", *[f"{r.macro_f1:.4f}" for r in results])
+    cmp_table.add_row("Micro-F1", *[f"{r.micro_f1:.4f}" for r in results])
+    cmp_table.add_row("Evaluated tokens", *[str(r.evaluated_tokens) for r in results])
+    console.print(cmp_table)
+
+    # Per-tag comparison
+    all_tags = sorted({tm.tag for r in results for tm in r.per_tag})
+    tag_table = Table(title="\nPer-Tag F1 Comparison")
+    tag_table.add_column("Tag", style="bold")
+    for r in results:
+        tag_table.add_column(r.adapter_name, justify="right")
+
+    for tag in all_tags:
+        row = [tag]
+        for r in results:
+            f1 = next((tm.f1 for tm in r.per_tag if tm.tag == tag), 0.0)
+            row.append(f"{f1:.4f}")
+        tag_table.add_row(*row)
+    console.print(tag_table)
+
+    if output:
+        comparison = {
+            "adapters": [
+                {
+                    "name": r.adapter_name,
+                    "accuracy": r.accuracy,
+                    "macro_f1": r.macro_f1,
+                    "micro_f1": r.micro_f1,
+                    "evaluated_tokens": r.evaluated_tokens,
+                }
+                for r in results
+            ]
+        }
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with open(output, "w") as f:
+            json.dump(comparison, f, indent=2)
+        console.print(f"\nComparison saved to {output}")
