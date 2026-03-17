@@ -152,3 +152,35 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 6. Add GitHub contributors: `michaelscho` (Michael) and `wachauer` (Katharina) to repo
 
 **Git:** 6 commits on main, last `170ef57`, pushed to origin.
+
+## 2026-03-17 — handoff
+
+**Summary:** Phase 2 infrastructure built. Gold passthrough validated (100% accuracy, 2,122,630 tokens, 16 tags). Added majority-class baseline (18.4% — NOM is most frequent tag), Gemini API adapter with MHG-specific prompt template (derived from MHDBDB pos-disambiguator skill), result caching (JSONL), subset selector (genre-stratified), CLI `compare` command, and `--subset` flag. Decided: diplomatic forms as default LLM input (modernized would introduce unvalidated normalization). Planned CLI-subscription adapters (claude -p, gemini CLI) for flat-rate users.
+
+**Phase:** Implementation (Phase 2 in progress). New files this session:
+- Adapters: `majority_class.py`, `gemini.py`, `prompt_template.py`, `cache.py`
+- Data: `subset.py` (genre-stratified subset selector)
+- CLI: updated with `compare` command, `--subset`, `--verbose` flags
+- Plan: `docs/CLI-ADAPTER-PLAN.md` (CLI-subscription adapter design)
+- Docs from Phase 1 unchanged, still current
+
+**Open issues:**
+- GEMINI_API_KEY not set in Christian's environment — Gemini adapter not yet test-run
+- CLI-subscription adapters (claude-cli, gemini-cli) designed but not yet implemented — see `docs/CLI-ADAPTER-PLAN.md`
+- Gemini CLI exact flags unknown (unlike Claude Code's well-documented `-p` mode)
+- Tests not yet written for new adapters (majority, gemini, cache, subset)
+- ARCHITECTURE.md not yet updated with new adapter types and CLI changes
+- KO* (22k tokens) still excluded — context-sensitive resolution deferred
+- Inter-annotator consistency in ReM still unchecked
+- RESEARCH.md citations still unverified against original papers
+- GitHub contributors (michaelscho, wachauer) still not invited
+
+**Next steps:**
+1. Set `GEMINI_API_KEY` and test-run Gemini adapter on subset (`--adapter gemini --subset 10`)
+2. Implement CLI-subscription adapters per `docs/CLI-ADAPTER-PLAN.md` — start with `claude-cli`
+3. Write tests for new adapters (`test_cli_adapters.py`, `test_majority.py`)
+4. Update ARCHITECTURE.md with Phase 2 additions
+5. First real head-to-head: `mhd-bench compare ... --adapters majority,gemini --subset 10`
+6. Install `google-genai`: `pip install "mhd-pos-benchmark[gemini]"`
+
+**Git:** 7 commits on main, last `8a9cccf`, pushed to origin.
