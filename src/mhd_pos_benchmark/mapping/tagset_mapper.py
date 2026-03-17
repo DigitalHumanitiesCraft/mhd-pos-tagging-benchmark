@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import yaml
 
 from mhd_pos_benchmark.data.corpus import Document, Token
+
+logger = logging.getLogger(__name__)
 
 _YAML_PATH = Path(__file__).parent / "hits_to_mhdbdb.yaml"
 
@@ -15,7 +18,7 @@ class TagsetMapper:
     """Maps HiTS POS tags to MHDBDB POS tags using the YAML definition."""
 
     def __init__(self, yaml_path: Path = _YAML_PATH) -> None:
-        with open(yaml_path) as f:
+        with open(yaml_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         self._mappings: dict[str, str | None] = {}
         for hits_tag, mhdbdb_tag in data["mappings"].items():
@@ -41,6 +44,7 @@ class TagsetMapper:
         try:
             token.pos_mhdbdb = self.map_tag(token.pos_hits)
         except KeyError:
+            logger.warning("Unknown HiTS tag: %r in token %s", token.pos_hits, token.id)
             token.pos_mhdbdb = None
         return token
 

@@ -1,10 +1,14 @@
-"""Prompt template for LLM-based POS tagging of Middle High German.
+"""Prompt template and response parsing for LLM-based POS tagging of MHG.
 
 Derived from the MHDBDB pos-disambiguator skill but adapted for fresh tagging
 (assigning tags from scratch, not disambiguating existing compound tags).
 
-The template is shared across all LLM adapters (Gemini, Claude, etc.).
+Shared across all LLM adapters (Gemini API, Claude CLI, etc.).
 """
+
+from __future__ import annotations
+
+import json
 
 # System prompt: establishes the LLM as a MHG linguistics expert
 SYSTEM_PROMPT = """\
@@ -47,9 +51,64 @@ assign a Part-of-Speech tag to each word in a MHG text.
 Return ONLY a JSON array of tags, one per word, in the same order as the input. \
 No explanations, no markdown, no extra text. Example:
 
-Input: sô sprach der rîter
+Input:
+1. sô
+2. sprach
+3. der
+4. rîter
 Output: ["ADV", "VRB", "DET", "NOM"]
 """
+
+
+# Valid MHDBDB tags — shared across all LLM adapters for response validation
+VALID_TAGS = frozenset({
+    "NOM", "NAM", "ADJ", "ADV", "DET", "POS", "PRO", "PRP",
+    "NEG", "NUM", "SCNJ", "CCNJ", "VRB", "VEX", "VEM", "INJ",
+})
+
+
+def parse_tag_response(text: str, expected_count: int) -> list[str]:
+    """Parse and validate a JSON tag array from an LLM response.
+
+    Handles markdown fences, trailing text after the JSON array, and
+    other common LLM output quirks.
+    Shared by all LLM adapters (API and CLI).
+    """
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+    if text.endswith("```"):
+        text = text[: text.rfind("```")]
+    text = text.strip()
+
+    # Extract just the JSON array — LLMs sometimes add text after it
+    start = text.find("[")
+    if start != -1:
+        # Find matching closing bracket
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "[":
+                depth += 1
+            elif text[i] == "]":
+                depth -= 1
+                if depth == 0:
+                    text = text[start : i + 1]
+                    break
+
+    tags = json.loads(text)
+
+    if not isinstance(tags, list):
+        raise ValueError(f"Expected JSON array, got {type(tags).__name__}")
+
+    if len(tags) != expected_count:
+        raise ValueError(f"Expected {expected_count} tags, got {len(tags)}")
+
+    invalid = [(i, t) for i, t in enumerate(tags) if t not in VALID_TAGS]
+    if invalid:
+        examples = invalid[:5]
+        raise ValueError(f"{len(invalid)} invalid tags: {examples}")
+
+    return tags
 
 
 def build_tagging_prompt(forms: list[str], context_window: int = 0) -> str:

@@ -2,7 +2,7 @@
 
 ## Project in One Paragraph
 
-**Which model tags Middle High German POS best?** This benchmark answers that question by enabling direct head-to-head comparison of any POS tagger against a validated ground truth. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) with hand-annotated HiTS POS tags (73 tags), mapped to the MHDBDB 19-tag tagset. Technology-agnostic: the same adapter interface works for frontier LLMs (currently Gemini 3.1 Pro, Claude Opus 4.6), open-source models, encoder models, or classical taggers. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Before this benchmark, there was no way to objectively compare — the ground truth pipeline makes it possible.
+**Which model tags Middle High German POS best?** This benchmark answers that question by enabling direct head-to-head comparison of any POS tagger against a validated ground truth. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) with hand-annotated HiTS POS tags (73 tags), mapped to the MHDBDB tagset (19 defined, 16 evaluable — CNJ, IPA, DIG have no HiTS source). Technology-agnostic: the same adapter interface works for frontier LLMs (currently Gemini 3.1 Pro, Claude Opus 4.6), open-source models, encoder models, or classical taggers. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Before this benchmark, there was no way to objectively compare — the ground truth pipeline makes it possible.
 
 ## Team
 
@@ -23,7 +23,7 @@ The MHDBDB TEI repository (`../mhdbdb-tei-only/`) contains ~670 TEI-encoded MHG 
 
 ## ReM Data
 
-- **Location:** `ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/` (407 files, gitignored)
+- **Location:** `ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/` (406 parseable documents, gitignored)
 - **Format:** CORA-XML — see [CORA-XML-FORMAT.md](docs/CORA-XML-FORMAT.md)
 - **Download:** https://www.linguistics.rub.de/rem/access/index.html (106 MB)
 - **Citation:** Roussel, Adam; Klein, Thomas; Dipper, Stefanie; Wegera, Klaus-Peter; Wich-Reif, Claudia (2024). Referenzkorpus Mittelhochdeutsch (1050–1350), Version 2.1. ISLRN 937-948-254-174-0.

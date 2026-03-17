@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from mhd_pos_benchmark.adapters.base import ModelAdapter
 from mhd_pos_benchmark.data.corpus import Document
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -14,6 +17,7 @@ class AlignedPair:
 
     token_id: str
     form: str
+    form_diplomatic: str
     gold: str
     predicted: str
 
@@ -35,6 +39,13 @@ class AlignmentResult:
 def align_document(document: Document, adapter: ModelAdapter) -> AlignmentResult:
     """Run adapter on a document and align predictions with ground truth."""
     mappable = document.mappable_tokens
+
+    if not mappable:
+        raise ValueError(
+            f"Document {document.id}: no mappable tokens — "
+            f"was map_document() called?"
+        )
+
     predictions = adapter.predict(document)
 
     if len(predictions) != len(mappable):
@@ -47,6 +58,7 @@ def align_document(document: Document, adapter: ModelAdapter) -> AlignmentResult
         AlignedPair(
             token_id=token.id,
             form=token.form_modernized,
+            form_diplomatic=token.form_diplomatic,
             gold=token.pos_mhdbdb,
             predicted=pred,
         )
@@ -62,7 +74,18 @@ def align_document(document: Document, adapter: ModelAdapter) -> AlignmentResult
 
 
 def align_corpus(
-    documents: list[Document], adapter: ModelAdapter
+    documents: list[Document],
+    adapter: ModelAdapter,
+    continue_on_error: bool = False,
 ) -> list[AlignmentResult]:
     """Run adapter on all documents and collect alignment results."""
-    return [align_document(doc, adapter) for doc in documents]
+    results: list[AlignmentResult] = []
+    for doc in documents:
+        try:
+            results.append(align_document(doc, adapter))
+        except Exception as e:
+            if continue_on_error:
+                logger.error("Skipping document %s: %s", doc.id, e)
+            else:
+                raise
+    return results

@@ -184,3 +184,9 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 6. Install `google-genai`: `pip install "mhd-pos-benchmark[gemini]"`
 
 **Git:** 7 commits on main, last `8a9cccf`, pushed to origin.
+
+## 2026-03-17 — save
+
+**Done:** Claude CLI adapter implemented and smoke-tested (correct tags on 3 MHG tokens via `claude -p --model opus`). Full CODE-REVIEW.md analysis performed and all 30 issues fixed: 4 high-severity bugs (hardcoded model, KeyError bypass, UTF-8 encoding, cache staleness), 10 medium issues (form mismatch, corrupt cache, missing warnings, error handling), 6 low-severity cleanups, documentation corrections (19→16 evaluable tags, model names, README Quick Start). Shared `parse_tag_response()` extracted to `prompt_template.py`. `--api-key` flag added (masked interactive prompt, never stored). Cache upgraded with config hash + length validation. ARCHITECTURE.md and REQUIREMENTS.md updated.
+**Decisions:** Default models: Claude Opus 4.6 (`--model opus`), Gemini 3.1 Pro (`gemini-3.1-pro`). API keys via env var or `--api-key` flag with masked input — no web interface needed. System prompt example updated to numbered format matching actual prompts.
+**Dead ends:** Windows cp1252 encoding broke MHG Unicode in subprocess stdin — fixed with `encoding="utf-8"`. Initial 120s timeout too short for 200-token chunks — bumped to 300s.

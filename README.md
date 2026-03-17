@@ -17,7 +17,7 @@ mhd-bench parse ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --stats
 mhd-bench mapping --validate --corpus-dir ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/
 
 # Run pipeline sanity check (gold passthrough = 100% accuracy)
-mhd-bench evaluate --adapter passthrough
+mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --adapter passthrough
 ```
 
 ## Data
@@ -28,7 +28,7 @@ Download ReM v2.1 CORA-XML from [the official site](https://www.linguistics.rub.
 
 | Document | Content |
 |----------|---------|
-| [MHDBDB-TAGSET.md](docs/MHDBDB-TAGSET.md) | Target 19-tag tagset with functional distinctions |
+| [MHDBDB-TAGSET.md](docs/MHDBDB-TAGSET.md) | Target tagset: 19 MHDBDB tags defined, 16 evaluable (3 have no HiTS source) |
 | [HITS-TAGSET.md](docs/HITS-TAGSET.md) | Source HiTS tagset — all 73 tags with corpus frequencies |
 | [TAGSET-MAPPING.md](docs/TAGSET-MAPPING.md) | HiTS → MHDBDB mapping rationale and gap analysis |
 | [CORA-XML-FORMAT.md](docs/CORA-XML-FORMAT.md) | ReM data format reference |

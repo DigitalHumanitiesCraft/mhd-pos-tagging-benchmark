@@ -11,7 +11,7 @@ from rich.table import Table
 
 console = Console()
 
-ADAPTER_CHOICES = ["passthrough", "majority", "gemini"]
+ADAPTER_CHOICES = ["passthrough", "majority", "gemini", "claude-cli"]
 
 
 def _parse_and_map(corpus_dir: Path, subset: int | None = None):
@@ -27,7 +27,7 @@ def _parse_and_map(corpus_dir: Path, subset: int | None = None):
     for doc in documents:
         mapper.map_document(doc)
 
-    if subset:
+    if subset is not None:
         from mhd_pos_benchmark.data.subset import describe_subset, select_subset
 
         documents = select_subset(documents, n=subset)
@@ -37,7 +37,14 @@ def _parse_and_map(corpus_dir: Path, subset: int | None = None):
     return documents
 
 
-def _make_adapter(name: str, documents):
+def _resolve_api_key(api_key: str | None) -> str | None:
+    """Resolve API key: prompt interactively, or return the provided value."""
+    if api_key == "prompt":
+        return click.prompt("API key", hide_input=True)
+    return api_key
+
+
+def _make_adapter(name: str, documents: list, api_key: str | None = None):
     """Instantiate an adapter by name."""
     if name == "passthrough":
         from mhd_pos_benchmark.adapters.gold_passthrough import GoldPassthroughAdapter
@@ -52,7 +59,11 @@ def _make_adapter(name: str, documents):
     elif name == "gemini":
         from mhd_pos_benchmark.adapters.gemini import GeminiAdapter
 
-        return GeminiAdapter()
+        return GeminiAdapter(api_key=api_key)
+    elif name == "claude-cli":
+        from mhd_pos_benchmark.adapters.claude_cli import ClaudeCliAdapter
+
+        return ClaudeCliAdapter()
     else:
         raise click.UsageError(f"Unknown adapter: {name}")
 
@@ -161,9 +172,22 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     default=None,
     help="Save JSON results to this path",
 )
+@click.option(
+    "--api-key",
+    type=str,
+    default=None,
+    is_flag=False,
+    flag_value="prompt",
+    help="API key for the adapter. Pass a value, or use bare --api-key to enter interactively (masked).",
+)
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
 def evaluate(
-    corpus_dir: Path, adapter: str, subset: int | None, output: Path | None, verbose: bool
+    corpus_dir: Path,
+    adapter: str,
+    subset: int | None,
+    output: Path | None,
+    api_key: str | None,
+    verbose: bool,
 ) -> None:
     """Run evaluation pipeline on the corpus."""
     from mhd_pos_benchmark.evaluation.comparator import align_corpus
@@ -173,8 +197,9 @@ def evaluate(
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    api_key = _resolve_api_key(api_key)
     documents = _parse_and_map(corpus_dir, subset)
-    model = _make_adapter(adapter, documents)
+    model = _make_adapter(adapter, documents, api_key=api_key)
 
     console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
     alignments = align_corpus(documents, model)
@@ -207,9 +232,22 @@ def evaluate(
     default=None,
     help="Save JSON comparison to this path",
 )
+@click.option(
+    "--api-key",
+    type=str,
+    default=None,
+    is_flag=False,
+    flag_value="prompt",
+    help="API key for API-based adapters. Pass a value, or use bare --api-key to enter interactively (masked).",
+)
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
 def compare(
-    corpus_dir: Path, adapters: str, subset: int | None, output: Path | None, verbose: bool
+    corpus_dir: Path,
+    adapters: str,
+    subset: int | None,
+    output: Path | None,
+    api_key: str | None,
+    verbose: bool,
 ) -> None:
     """Compare multiple adapters side-by-side."""
     import json
@@ -222,11 +260,12 @@ def compare(
         logging.basicConfig(level=logging.DEBUG)
 
     adapter_names = [a.strip() for a in adapters.split(",")]
+    api_key = _resolve_api_key(api_key)
     documents = _parse_and_map(corpus_dir, subset)
 
     results: list[EvaluationResult] = []
     for name in adapter_names:
-        model = _make_adapter(name, documents)
+        model = _make_adapter(name, documents, api_key=api_key)
         console.print(f"\nRunning: [bold]{model.name}[/bold]...")
         alignments = align_corpus(documents, model)
         result = compute_metrics(alignments, model.name)
@@ -275,6 +314,6 @@ def compare(
             ]
         }
         output.parent.mkdir(parents=True, exist_ok=True)
-        with open(output, "w") as f:
-            json.dump(comparison, f, indent=2)
+        with open(output, "w", encoding="utf-8") as f:
+            json.dump(comparison, f, indent=2, ensure_ascii=False)
         console.print(f"\nComparison saved to {output}")

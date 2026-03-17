@@ -6,10 +6,13 @@ before running expensive evaluations on the full corpus.
 
 from __future__ import annotations
 
+import logging
 import random
 from collections import defaultdict
 
 from mhd_pos_benchmark.data.corpus import Document
+
+logger = logging.getLogger(__name__)
 
 
 def select_subset(
@@ -35,7 +38,6 @@ def select_subset(
         genre_docs.sort(key=lambda d: len(d.mappable_tokens))
 
     selected: list[Document] = []
-    remaining = n
 
     # Proportional allocation, at least 1 per genre
     genre_counts: dict[str | None, int] = {}
@@ -44,10 +46,15 @@ def select_subset(
 
     # Adjust to hit exactly n
     total_allocated = sum(genre_counts.values())
-    if total_allocated > n:
-        # Trim from largest genre
-        largest = max(genre_counts, key=lambda g: genre_counts[g])
-        genre_counts[largest] -= total_allocated - n
+    while total_allocated > n:
+        # Trim one from the largest genre (but never below 1)
+        largest = max(
+            (g for g in genre_counts if genre_counts[g] > 1),
+            key=lambda g: genre_counts[g],
+            default=max(genre_counts, key=lambda g: genre_counts[g]),
+        )
+        genre_counts[largest] -= 1
+        total_allocated -= 1
 
     for genre, count in genre_counts.items():
         docs = by_genre[genre]
@@ -60,6 +67,11 @@ def select_subset(
         picks = rng.sample(middle, min(count, len(middle)))
         selected.extend(picks)
 
+    if len(selected) < n:
+        logger.warning(
+            "Subset returned %d documents instead of requested %d",
+            len(selected), n,
+        )
     return selected[:n]
 
 

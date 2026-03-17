@@ -35,12 +35,12 @@ Plug in **any** POS tagger — LLM, encoder model, classical — via the adapter
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E2.1 | As a researcher, I want to plug in any POS tagger via a simple adapter interface (input: tokens, output: tags), so that the benchmark is fully technology-agnostic — LLMs, encoder models (BERT-style), fine-tuned classifiers, CRF/HMM, anything | Must | Open |
-| E2.2 | As a researcher, I want to evaluate at least one frontier LLM (Gemini or Claude), so that I can measure generative model performance on MHG POS | Must | Open |
+| E2.1 | As a researcher, I want to plug in any POS tagger via a simple adapter interface (input: tokens, output: tags), so that the benchmark is fully technology-agnostic — LLMs, encoder models (BERT-style), fine-tuned classifiers, CRF/HMM, anything | Must | Done (4 adapters: passthrough, majority, gemini, claude-cli) |
+| E2.2 | As a researcher, I want to evaluate at least one frontier LLM (Gemini or Claude), so that I can measure generative model performance on MHG POS | Must | Ready (Gemini API + Claude CLI adapters built, not yet run on full corpus) |
 | E2.3 | As a researcher, I want to evaluate at least one open-source/self-trained model, so that the paper has a non-commercial baseline | Must | Open |
-| E2.4 | As a researcher, I want result caching (JSONL per document+model+version), so that I don't re-run expensive evaluations | Must | Open |
-| E2.5 | As a researcher, I want `mhd-bench compare` to show a side-by-side table of multiple models, so that I can quickly see which model wins on which tags | Should | Open |
-| E2.6 | As a researcher, I want a configurable prompt template for LLM-based adapters (derived from MHDBDB pos-disambiguator skill), so that LLMs get comparable instructions | Should | Open (LLM-specific, not all adapters) |
+| E2.4 | As a researcher, I want result caching (JSONL per document+model+version), so that I don't re-run expensive evaluations | Must | Done (config hash, length validation, corrupt-line recovery) |
+| E2.5 | As a researcher, I want `mhd-bench compare` to show a side-by-side table of multiple models, so that I can quickly see which model wins on which tags | Should | Done |
+| E2.6 | As a researcher, I want a configurable prompt template for LLM-based adapters (derived from MHDBDB pos-disambiguator skill), so that LLMs get comparable instructions | Should | Done (shared prompt_template.py with MHG-specific system prompt) |
 
 ### E3: Analysis & Publication (Phase 2–3)
 
@@ -58,7 +58,7 @@ Deeper analysis for the paper.
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (23 tests, coverage not measured) |
+| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (39 tests, coverage not measured) |
 | E4.2 | As a developer, I want JSON result output, so that results are machine-readable for downstream analysis | Must | Done |
 | E4.3 | As a researcher, I want the benchmark to handle the full ReM corpus (2.5M tokens) in under 5 minutes for the passthrough adapter | Should | Not benchmarked |
 | E4.4 | As a developer, I want a MODEL-ADAPTER-GUIDE.md, so that contributors can plug in new models without reading all the code | Could | Open |

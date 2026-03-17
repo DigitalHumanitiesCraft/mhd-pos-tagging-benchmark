@@ -1,6 +1,7 @@
 # HiTS → MHDBDB Tagset Mapping
 #
-# Maps 73 HiTS POS tags (as used in ReM v2.1) to 19 MHDBDB POS tags.
+# Maps 73 HiTS POS tags (as used in ReM v2.1) to 16 evaluable MHDBDB POS tags.
+# (3 MHDBDB tags — CNJ, IPA, DIG — have no HiTS source and are excluded.)
 # This is the single source of truth for tagset conversion in the benchmark.
 #
 # Convention:

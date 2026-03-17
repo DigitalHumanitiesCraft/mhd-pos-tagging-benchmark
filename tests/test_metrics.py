@@ -17,9 +17,9 @@ def _make_result(pairs, doc_id="test", total=None, excluded=0):
 
 def test_perfect_accuracy():
     pairs = [
-        AlignedPair("t1", "ritter", "NOM", "NOM"),
-        AlignedPair("t2", "reit", "VRB", "VRB"),
-        AlignedPair("t3", "in", "PRP", "PRP"),
+        AlignedPair("t1", "ritter", "ritter", "NOM", "NOM"),
+        AlignedPair("t2", "reit", "reit", "VRB", "VRB"),
+        AlignedPair("t3", "in", "in", "PRP", "PRP"),
     ]
     result = compute_metrics([_make_result(pairs)], "test")
     assert result.accuracy == 1.0
@@ -29,16 +29,16 @@ def test_perfect_accuracy():
 
 def test_partial_accuracy():
     pairs = [
-        AlignedPair("t1", "ritter", "NOM", "NOM"),
-        AlignedPair("t2", "reit", "VRB", "ADV"),  # wrong
-        AlignedPair("t3", "in", "PRP", "PRP"),
+        AlignedPair("t1", "ritter", "ritter", "NOM", "NOM"),
+        AlignedPair("t2", "reit", "reit", "VRB", "ADV"),  # wrong
+        AlignedPair("t3", "in", "in", "PRP", "PRP"),
     ]
     result = compute_metrics([_make_result(pairs)], "test")
     assert abs(result.accuracy - 2 / 3) < 1e-6
 
 
 def test_token_counts():
-    pairs = [AlignedPair("t1", "x", "NOM", "NOM")]
+    pairs = [AlignedPair("t1", "x", "x", "NOM", "NOM")]
     result = compute_metrics([_make_result(pairs, total=10, excluded=9)], "test")
     assert result.total_tokens == 10
     assert result.evaluated_tokens == 1
@@ -47,8 +47,8 @@ def test_token_counts():
 
 def test_confusion_matrix_shape():
     pairs = [
-        AlignedPair("t1", "a", "NOM", "NOM"),
-        AlignedPair("t2", "b", "VRB", "NOM"),
+        AlignedPair("t1", "a", "a", "NOM", "NOM"),
+        AlignedPair("t2", "b", "b", "VRB", "NOM"),
     ]
     result = compute_metrics([_make_result(pairs)], "test")
     n_labels = len(result.confusion_labels)

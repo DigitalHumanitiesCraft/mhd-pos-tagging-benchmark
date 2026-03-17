@@ -7,7 +7,7 @@ Current state of the system. Updated when the code changes.
 ## Pipeline
 
 ```
-ReM CORA-XML files (407 files, 2.58M tokens)
+ReM CORA-XML files (406 docs, 2.58M tokens)
        │
        ▼
   ┌─────────────┐
@@ -160,18 +160,25 @@ Exception: `DPOS*` always → POS regardless of suffix.
 ```
 src/mhd_pos_benchmark/
 ├── __init__.py              # version
-├── cli.py                   # Click CLI: parse, mapping, evaluate
+├── cli.py                   # Click CLI: parse, mapping, evaluate, compare
 ├── data/
 │   ├── corpus.py            # Token, Document dataclasses
-│   └── rem_parser.py        # CORA-XML → Document (lxml)
+│   ├── rem_parser.py        # CORA-XML → Document (lxml)
+│   └── subset.py            # Genre-stratified subset selection
 ├── mapping/
 │   ├── tagset_mapper.py     # Load YAML, map tags, find unmapped
 │   └── hits_to_mhdbdb.yaml  # 73 mappings (v0.2.0)
 ├── adapters/
 │   ├── base.py              # ModelAdapter ABC
-│   └── gold_passthrough.py  # Returns mapped ground truth
+│   ├── gold_passthrough.py  # Returns mapped ground truth
+│   ├── majority_class.py    # Most-frequent-tag baseline (18.4%)
+│   ├── gemini.py            # Gemini API adapter (google-genai SDK)
+│   ├── cli_base.py          # Shared base for CLI-subprocess adapters
+│   ├── claude_cli.py        # Claude Code CLI adapter (claude -p)
+│   ├── prompt_template.py   # Shared prompt + response parsing for all LLMs
+│   └── cache.py             # JSONL result cache with config hash
 └── evaluation/
-    ├── comparator.py        # Align gold vs predicted
+    ├── comparator.py        # Align gold vs predicted, continue-on-error
     ├── metrics.py           # Accuracy, P/R/F1, confusion (sklearn)
     └── report.py            # Console (rich) + JSON output
 ```
@@ -179,10 +186,25 @@ src/mhd_pos_benchmark/
 ## CLI
 
 ```bash
-mhd-bench parse <corpus_dir> [--stats]           # Parse + optional statistics
-mhd-bench mapping [--validate --corpus-dir ...]   # Show or validate mapping
-mhd-bench evaluate <corpus_dir> --adapter NAME    # Run full pipeline
-    [--output results.json]
+mhd-bench parse <corpus_dir> [--stats]
+mhd-bench mapping [--validate --corpus-dir ...]
+mhd-bench evaluate <corpus_dir> --adapter NAME [--subset N] [--api-key] [-v]
+mhd-bench compare <corpus_dir> --adapters a,b [--subset N] [--api-key] [-v]
+```
+
+Adapters: `passthrough`, `majority`, `gemini`, `claude-cli`
+
+`--api-key`: bare flag → masked interactive prompt; with value → use directly; omitted → env var fallback. Key never touches disk.
+
+## Adapter Hierarchy
+
+```
+ModelAdapter (ABC)
+├── GoldPassthroughAdapter          # Pipeline validation (100%)
+├── MajorityClassAdapter            # Baseline (most frequent tag)
+├── GeminiAdapter (API)             # google-genai SDK, needs GEMINI_API_KEY
+└── CliLlmAdapter (ABC)             # Subprocess-based, subscription auth
+    └── ClaudeCliAdapter            # claude -p --model opus (default)
 ```
 
 ## Dependencies
@@ -195,14 +217,16 @@ mhd-bench evaluate <corpus_dir> --adapter NAME    # Run full pipeline
 | scikit-learn | Metrics (P/R/F1, confusion) | ≥1.4 |
 | rich | Console tables | ≥13.0 |
 | tabulate | Table formatting | ≥0.9 |
+| google-genai | Gemini API (optional) | ≥1.0 |
 
 Python ≥3.13 required.
 
 ## Tests
 
-23 tests in `tests/`:
-- `test_rem_parser.py` — fixture-based, covers simple + multi-mod + metadata
-- `test_tagset_mapper.py` — all suffix patterns, unmappable, unknown tags
-- `test_metrics.py` — perfect/partial accuracy, token counts, confusion shape
+39 tests in `tests/`:
+- `test_rem_parser.py` (6) — fixture-based, covers simple + multi-mod + metadata
+- `test_tagset_mapper.py` (12) — all suffix patterns, unmappable, unknown tags
+- `test_metrics.py` (4) — perfect/partial accuracy, token counts, confusion shape
+- `test_cli_adapters.py` (17) — parse_tag_response (6), ClaudeCliAdapter (11): predict, retry, timeout, cache, chunking
 
 Fixture: `tests/fixtures/sample_cora.xml` (8 tokens: NA, VVFIN, APPR, DDART, NA, clitic APPR+DDART, $_, FM)

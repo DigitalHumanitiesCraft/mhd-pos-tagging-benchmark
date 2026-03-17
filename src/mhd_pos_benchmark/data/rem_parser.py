@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from lxml import etree
 
 from mhd_pos_benchmark.data.corpus import Document, Token
+
+logger = logging.getLogger(__name__)
 
 # Header fields to extract as metadata
 _HEADER_FIELDS = [
@@ -63,6 +66,7 @@ def _parse_token(token_el: etree._Element) -> list[Token]:
     Multi-mod tokens (clitics) yield multiple Token objects.
     """
     tokens: list[Token] = []
+    skipped = 0
 
     # Get diplomatic form from tok_dipl (first one for display)
     dipl_el = token_el.find("tok_dipl")
@@ -71,10 +75,12 @@ def _parse_token(token_el: etree._Element) -> list[Token]:
     for anno_el in token_el.findall("tok_anno"):
         pos_el = anno_el.find("pos")
         if pos_el is None:
+            skipped += 1
             continue
 
         pos_tag = pos_el.get("tag", "")
         if not pos_tag:
+            skipped += 1
             continue
 
         anno_id = anno_el.get("id", "")
@@ -91,4 +97,9 @@ def _parse_token(token_el: etree._Element) -> list[Token]:
             lemma=lemma,
         ))
 
+    if skipped:
+        logger.debug(
+            "Skipped %d tok_anno without POS in token %s",
+            skipped, token_el.get("id", "?"),
+        )
     return tokens

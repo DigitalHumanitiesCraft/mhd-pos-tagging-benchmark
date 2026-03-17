@@ -1,6 +1,6 @@
 """Gemini adapter — POS tagging via Google Gemini API.
 
-Requires GEMINI_API_KEY environment variable.
+API key resolution: --api-key flag > GEMINI_API_KEY env var.
 Uses google-genai SDK (google-genai>=1.0).
 """
 
@@ -16,16 +16,11 @@ from mhd_pos_benchmark.adapters.cache import ResultCache
 from mhd_pos_benchmark.adapters.prompt_template import (
     SYSTEM_PROMPT,
     build_chunked_prompts,
+    parse_tag_response,
 )
 from mhd_pos_benchmark.data.corpus import Document
 
 logger = logging.getLogger(__name__)
-
-# Valid MHDBDB tags for response validation
-VALID_TAGS = frozenset({
-    "NOM", "NAM", "ADJ", "ADV", "DET", "POS", "PRO", "PRP",
-    "NEG", "NUM", "SCNJ", "CCNJ", "VRB", "VEX", "VEM", "INJ",
-})
 
 
 class GeminiAdapter(ModelAdapter):
@@ -33,16 +28,17 @@ class GeminiAdapter(ModelAdapter):
 
     def __init__(
         self,
-        model: str = "gemini-2.5-pro",
+        model: str = "gemini-3.1-pro",
         chunk_size: int = 200,
         cache_dir=None,
         temperature: float = 0.0,
         max_retries: int = 3,
+        api_key: str | None = None,
     ) -> None:
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise EnvironmentError(
-                "GEMINI_API_KEY environment variable not set. "
+                "No API key provided. Use --api-key or set GEMINI_API_KEY. "
                 "Get a key at https://aistudio.google.com/apikey"
             )
 
@@ -53,20 +49,19 @@ class GeminiAdapter(ModelAdapter):
         self._chunk_size = chunk_size
         self._temperature = temperature
         self._max_retries = max_retries
-        self._cache = ResultCache(f"gemini-{model}", cache_dir)
+        config_hash = ResultCache.make_config_hash(chunk_size, SYSTEM_PROMPT)
+        self._cache = ResultCache(f"gemini-{model}", cache_dir, config_hash=config_hash)
 
     @property
     def name(self) -> str:
         return f"gemini-{self._model}"
 
     def predict(self, document: Document) -> list[str]:
-        # Check cache first
-        cached = self._cache.get(document.id)
+        mappable = document.mappable_tokens
+        cached = self._cache.get(document.id, expected_count=len(mappable))
         if cached is not None:
             logger.info("Cache hit for %s", document.id)
             return cached
-
-        mappable = document.mappable_tokens
         forms = [t.form_diplomatic for t in mappable]
 
         if not forms:
@@ -112,7 +107,9 @@ class GeminiAdapter(ModelAdapter):
                     ),
                 )
 
-                tags = self._parse_response(response.text, expected_count)
+                if response.text is None:
+                    raise ValueError("Gemini response blocked by safety filter")
+                tags = parse_tag_response(response.text, expected_count)
                 return tags
 
             except (json.JSONDecodeError, ValueError) as e:
@@ -135,32 +132,3 @@ class GeminiAdapter(ModelAdapter):
             f"Failed after {self._max_retries} attempts: {last_error}"
         ) from last_error
 
-    def _parse_response(self, text: str, expected_count: int) -> list[str]:
-        """Parse and validate the JSON response from Gemini."""
-        # Strip markdown fences if present
-        text = text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[: text.rfind("```")]
-        text = text.strip()
-
-        tags = json.loads(text)
-
-        if not isinstance(tags, list):
-            raise ValueError(f"Expected JSON array, got {type(tags).__name__}")
-
-        if len(tags) != expected_count:
-            raise ValueError(
-                f"Expected {expected_count} tags, got {len(tags)}"
-            )
-
-        # Validate each tag
-        invalid = [(i, t) for i, t in enumerate(tags) if t not in VALID_TAGS]
-        if invalid:
-            examples = invalid[:5]
-            raise ValueError(
-                f"{len(invalid)} invalid tags: {examples}"
-            )
-
-        return tags
