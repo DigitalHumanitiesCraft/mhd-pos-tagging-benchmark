@@ -2,7 +2,7 @@
 
 Current state of the system. Updated when the code changes.
 
-**Related:** [REQUIREMENTS.md](REQUIREMENTS.md) (what we need) · [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) (historical plan)
+**Related:** [REQUIREMENTS.md](REQUIREMENTS.md) (what we need)
 
 ## Pipeline
 

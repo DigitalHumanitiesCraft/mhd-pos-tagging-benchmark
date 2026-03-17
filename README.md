@@ -36,7 +36,6 @@ Download ReM v2.1 CORA-XML from [the official site](https://www.linguistics.rub.
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pipeline, data model, adapter interface, modules |
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md) | User stories, epics, success criteria |
 | [RESEARCH.md](docs/RESEARCH.md) | Academic context, related work, research gap |
-| [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | Historical plan (Phase 2 items) |
 | [JOURNAL.md](docs/JOURNAL.md) | Decision log and process journal |
 
 ## License
