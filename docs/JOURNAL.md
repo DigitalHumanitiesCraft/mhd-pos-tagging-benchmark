@@ -190,3 +190,38 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 **Done:** Claude CLI adapter implemented and smoke-tested (correct tags on 3 MHG tokens via `claude -p --model opus`). Full CODE-REVIEW.md analysis performed and all 30 issues fixed: 4 high-severity bugs (hardcoded model, KeyError bypass, UTF-8 encoding, cache staleness), 10 medium issues (form mismatch, corrupt cache, missing warnings, error handling), 6 low-severity cleanups, documentation corrections (19→16 evaluable tags, model names, README Quick Start). Shared `parse_tag_response()` extracted to `prompt_template.py`. `--api-key` flag added (masked interactive prompt, never stored). Cache upgraded with config hash + length validation. ARCHITECTURE.md and REQUIREMENTS.md updated.
 **Decisions:** Default models: Claude Opus 4.6 (`--model opus`), Gemini 3.1 Pro (`gemini-3.1-pro`). API keys via env var or `--api-key` flag with masked input — no web interface needed. System prompt example updated to numbered format matching actual prompts.
 **Dead ends:** Windows cp1252 encoding broke MHG Unicode in subprocess stdin — fixed with `encoding="utf-8"`. Initial 120s timeout too short for 200-token chunks — bumped to 300s.
+
+## 2026-03-17 — handoff
+
+**Summary:** Built Claude CLI adapter (`claude -p --model opus`), shared prompt/parsing infrastructure, and `--api-key` flag with masked interactive input. Performed full code review (CODE-REVIEW.md) and fixed all 30 issues across 4 severity levels. Updated ARCHITECTURE.md and REQUIREMENTS.md. 39 tests pass, pipeline smoke-tested end-to-end with real Claude CLI call on MHG tokens.
+
+**Phase:** Implementation (Phase 2 in progress). All docs current:
+- Knowledge: MHDBDB-TAGSET, HITS-TAGSET, CORA-XML-FORMAT, OVERLAP-TABLE
+- Architecture: ARCHITECTURE.md (updated with all Phase 2 modules)
+- Requirements: REQUIREMENTS.md (E2.1 done, E2.2 ready, E2.4-E2.6 done)
+- Research: RESEARCH.md (unchanged, still current)
+- Mapping: TAGSET-MAPPING.md + hits_to_mhdbdb.yaml v0.2.0
+- Process: JOURNAL.md, CODE-REVIEW.md (new), CLI-ADAPTER-PLAN.md
+- Tests: 39 tests across 4 test files
+
+**Open issues:**
+- No actual benchmark numbers yet — no model evaluated beyond 3-token smoke test
+- Gemini 3.1 Pro model ID (`gemini-3.1-pro`) not verified against Google SDK — may need `models/gemini-3.1-pro` or similar
+- GEMINI_API_KEY still not set in Christian's environment
+- Chunk boundary accuracy loss not quantified — `overlap` parameter exists but unused
+- No encoder/classical adapter (E2.3) — paper needs at least 3 model categories
+- KO* (22k tokens) still excluded — context-sensitive resolution deferred
+- Inter-annotator consistency in ReM still unchecked
+- RESEARCH.md citations still unverified against original papers
+- GitHub contributors (michaelscho, wachauer) still not invited
+- `results/claude-cli/` has stale cache from smoke test — delete before real runs
+
+**Next steps:**
+1. Run first real evaluation: `mhd-bench evaluate ... --adapter claude-cli --subset 10` (expect ~30 min)
+2. Delete stale cache: `rm -rf results/claude-cli/`
+3. Set GEMINI_API_KEY, test Gemini adapter on subset
+4. First head-to-head: `mhd-bench compare ... --adapters majority,claude-cli --subset 10`
+5. Investigate encoder model options for E2.3 (GHisBERT? custom fine-tune?)
+6. Push to origin: `git push`
+
+**Git:** 8 commits on main, last `480180b`, 1 ahead of origin.
