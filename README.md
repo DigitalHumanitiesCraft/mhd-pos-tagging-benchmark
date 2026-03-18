@@ -84,7 +84,7 @@ mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
 
 ### Via custom adapter (BERT, CRF, etc.)
 
-Implement the `ModelAdapter` interface — see [MODEL-ADAPTER-GUIDE.md](docs/MODEL-ADAPTER-GUIDE.md) for copy-paste examples (BERT, CRF, dictionary lookup).
+Implement the `ModelAdapter` interface — see [MODEL-ADAPTER-GUIDE.md](docs/guides/MODEL-ADAPTER-GUIDE.md) for copy-paste examples (BERT, CRF, dictionary lookup).
 
 ## Compare Models Head-to-Head
 
@@ -198,7 +198,7 @@ mhd-bench compare <corpus_dir> --adapters a,b [OPTIONS]
 
 | Document | Content |
 |----------|---------|
-| [MODEL-ADAPTER-GUIDE.md](docs/MODEL-ADAPTER-GUIDE.md) | How to add your own model (BERT, CRF, etc.) |
+| [MODEL-ADAPTER-GUIDE.md](docs/guides/MODEL-ADAPTER-GUIDE.md) | How to add your own model (BERT, CRF, etc.) |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pipeline, data model, adapter interface, modules |
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md) | User stories, epics, success criteria |
 | [MHDBDB-TAGSET.md](docs/MHDBDB-TAGSET.md) | Target tagset: 16 evaluable MHDBDB tags |
