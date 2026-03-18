@@ -225,3 +225,43 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 6. Push to origin: `git push`
 
 **Git:** 8 commits on main, last `480180b`, 1 ahead of origin.
+
+## 2026-03-18 — Session: code review, adapter consolidation, smoke tests
+
+**Done:**
+- Full code review (2 iterations from colleague) — fixed 16 issues total, added 62 tests (39→101)
+- Adapter consolidation: removed `cli_base.py`, `claude_cli.py`, `gemini.py` → replaced with 2 generic adapters (`generic_api.py`, `generic_cli.py`). Net -324 LOC.
+- GenericCliAdapter: prompt via stdin (fixes Windows argument-length limit), `-p`/`--prompt` flag detection, `shutil.which()` path resolution
+- GenericApiAdapter: openai SDK, provider presets (openai, gemini, mistral, groq), local endpoint support (ollama/vLLM)
+- Smoke test: Claude Opus 4.6 vs Gemini 2.5 Pro vs Gemini 3.1 Pro Preview on M084L (13 tokens). Gemini 3.1 Pro: 100%, Opus + Gemini 2.5: 92.3% (beide `wan` SCNJ→CCNJ)
+- MODEL-ADAPTER-GUIDE.md (E5.3): 3 copy-paste examples (dictionary, BERT, CRF)
+- README rewritten with real CLI examples and actual output
+- E5 (Universal Model Access): all 6 stories Done
+- Docs reorganized: `docs/guides/` for user-facing, `docs/` for promptotyping
+
+**Decisions:**
+- `--adapter api` + `--adapter cli` replace all model-specific adapters — fully generic
+- Gemini CLI model name: `gemini-3.1-pro-preview` (not `gemini-3.1-pro`)
+- Prompt via stdin for generic CLI (not as argument) — agentic CLIs interpret long arguments as session setup
+- Task-first prompt structure for CLI adapter: user task first, system prompt as REFERENCE after
+
+**Open issues:**
+- `compare` command can't compare two different LLMs in one call (global `--cli-cmd`/`--model`) — documented limitation, user does separate evaluate runs
+- RESEARCH.md citations still unverified against original papers
+- No encoder/classical model evaluated yet (E2.3)
+- Prompt-Bias: system prompt contains MHG hints (`wan` → SCNJ) — could confound model comparison
+- Reproduzierbarkeit: CLI-Adapter haben keine Temperature-Kontrolle — Paper muss Non-Determinismus diskutieren
+- GitHub contributors (michaelscho, wachauer) still not invited
+
+## 2026-03-19 — TODO: UX für Linguist_innen ohne Programmierkenntnisse
+
+**Kernfrage:** Wie können wir es Linguist_innen ohne Programmierkenntnisse ermöglichen, den Benchmark zu nutzen? Aktuell erfordert der Benchmark: Python 3.13 installieren, pip install, CLI-Kommandos, API-Keys setzen. Das ist für Computerlinguist_innen machbar, aber nicht für Mediävist_innen oder Literaturwissenschaftler_innen.
+
+**Mögliche Richtungen (noch nicht entschieden):**
+- Web-Interface? (Streamlit, Gradio) — niedrigste Einstiegshürde, aber Hosting nötig
+- Docker-Container mit vorkonfiguriertem Setup? — reproduzierbar, aber Docker-Installation nötig
+- Google Colab Notebook? — zero-install, aber API-Key-Handling in Colab heikel
+- Vereinfachte CLI mit interaktivem Wizard? (`mhd-bench quickstart` → führt durch Setup)
+- Vorkonfigurierte Presets? (`mhd-bench evaluate --preset gemini-quick` → setzt alles automatisch)
+
+**Ziel:** Ein/e Forscher/in mit ReM-Zugang und einem LLM-Account (z.B. Gemini, ChatGPT) soll den Benchmark nutzen können, ohne Python-Interna zu verstehen.
