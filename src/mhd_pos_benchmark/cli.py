@@ -11,7 +11,7 @@ from rich.table import Table
 
 console = Console()
 
-ADAPTER_CHOICES = ["passthrough", "majority", "gemini", "claude-cli", "cli"]
+ADAPTER_CHOICES = ["passthrough", "majority", "api", "cli"]
 
 
 def _parse_and_map(corpus_dir: Path, subset: int | None = None):
@@ -50,6 +50,8 @@ def _make_adapter(
     api_key: str | None = None,
     cli_cmd: str | None = None,
     model: str | None = None,
+    provider: str | None = None,
+    api_base: str | None = None,
 ):
     """Instantiate an adapter by name."""
     if name == "passthrough":
@@ -62,14 +64,15 @@ def _make_adapter(
         adapter = MajorityClassAdapter(documents)
         console.print(f"Majority tag: [bold]{adapter.majority_tag}[/bold]")
         return adapter
-    elif name == "gemini":
-        from mhd_pos_benchmark.adapters.gemini import GeminiAdapter
+    elif name == "api":
+        from mhd_pos_benchmark.adapters.generic_api import GenericApiAdapter
 
-        return GeminiAdapter(api_key=api_key)
-    elif name == "claude-cli":
-        from mhd_pos_benchmark.adapters.claude_cli import ClaudeCliAdapter
-
-        return ClaudeCliAdapter()
+        return GenericApiAdapter(
+            provider=provider or "openai",
+            model=model,
+            api_key=api_key,
+            api_base=api_base,
+        )
     elif name == "cli":
         from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
 
@@ -211,6 +214,18 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     default=None,
     help="Model name for display/caching (e.g. 'gpt-4o', 'gemini-2.5-pro').",
 )
+@click.option(
+    "--provider",
+    type=click.Choice(["openai", "gemini", "mistral", "groq"]),
+    default=None,
+    help="API provider for --adapter api (default: openai).",
+)
+@click.option(
+    "--api-base",
+    type=str,
+    default=None,
+    help="Custom API base URL (e.g. 'http://localhost:11434/v1' for ollama).",
+)
 def evaluate(
     corpus_dir: Path,
     adapter: str,
@@ -221,6 +236,8 @@ def evaluate(
     continue_on_error: bool,
     cli_cmd: str | None,
     model_name: str | None,
+    provider: str | None,
+    api_base: str | None,
 ) -> None:
     """Run evaluation pipeline on the corpus."""
     from rich.progress import Progress
@@ -236,6 +253,7 @@ def evaluate(
     documents = _parse_and_map(corpus_dir, subset)
     model = _make_adapter(
         adapter, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
+        provider=provider, api_base=api_base,
     )
 
     console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
@@ -302,6 +320,18 @@ def evaluate(
     default=None,
     help="Model name for display/caching.",
 )
+@click.option(
+    "--provider",
+    type=click.Choice(["openai", "gemini", "mistral", "groq"]),
+    default=None,
+    help="API provider for 'api' adapter entries.",
+)
+@click.option(
+    "--api-base",
+    type=str,
+    default=None,
+    help="Custom API base URL.",
+)
 def compare(
     corpus_dir: Path,
     adapters: str,
@@ -312,6 +342,8 @@ def compare(
     continue_on_error: bool,
     cli_cmd: str | None,
     model_name: str | None,
+    provider: str | None,
+    api_base: str | None,
 ) -> None:
     """Compare multiple adapters side-by-side."""
     import json
@@ -333,6 +365,7 @@ def compare(
     for name in adapter_names:
         model = _make_adapter(
             name, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
+            provider=provider, api_base=api_base,
         )
         console.print(f"\nRunning: [bold]{model.name}[/bold]...")
         with Progress(console=console) as progress:

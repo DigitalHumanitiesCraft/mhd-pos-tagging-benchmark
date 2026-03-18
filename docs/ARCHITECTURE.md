@@ -174,10 +174,8 @@ src/mhd_pos_benchmark/
 │   ├── base.py              # ModelAdapter ABC
 │   ├── gold_passthrough.py  # Returns mapped ground truth
 │   ├── majority_class.py    # Most-frequent-tag baseline (18.4%)
-│   ├── gemini.py            # Gemini API adapter (google-genai SDK)
-│   ├── generic_cli.py       # Generic CLI adapter (any CLI: gemini, codex, copilot, vibe)
-│   ├── cli_base.py          # Shared base for CLI adapters with system prompt flag
-│   ├── claude_cli.py        # Claude Code CLI adapter (claude -p)
+│   ├── generic_api.py       # Any OpenAI-compatible API (OpenAI, Gemini, Mistral, Groq, local)
+│   ├── generic_cli.py       # Any CLI tool (claude, gemini, codex, copilot, vibe, ...)
 │   ├── prompt_template.py   # Shared prompt + response parsing for all LLMs
 │   └── cache.py             # JSONL result cache with config hash
 └── evaluation/
@@ -195,11 +193,9 @@ mhd-bench evaluate <corpus_dir> --adapter NAME [--subset N] [--api-key] [-v]
 mhd-bench compare <corpus_dir> --adapters a,b [--subset N] [--api-key] [-v]
 ```
 
-Adapters: `passthrough`, `majority`, `gemini`, `claude-cli`, `cli`
+Adapters: `passthrough`, `majority`, `api`, `cli`
 
 `--api-key`: bare flag → masked interactive prompt; with value → use directly; omitted → env var fallback. Key never touches disk.
-
-`--adapter cli --cli-cmd "CMD"`: generic adapter for any CLI tool. See examples below.
 
 ## Adapter Hierarchy
 
@@ -207,31 +203,67 @@ Adapters: `passthrough`, `majority`, `gemini`, `claude-cli`, `cli`
 ModelAdapter (ABC)
 ├── GoldPassthroughAdapter          # Pipeline validation (100%)
 ├── MajorityClassAdapter            # Baseline (most frequent tag)
-├── GeminiAdapter (API)             # google-genai SDK, needs GEMINI_API_KEY
-├── GenericCliAdapter               # Any CLI: gemini, codex, copilot, vibe, ...
-└── CliLlmAdapter (ABC)             # Subprocess-based with system prompt flag
-    └── ClaudeCliAdapter            # claude -p --model opus (default)
+├── GenericApiAdapter               # Any OpenAI-compatible API (openai SDK)
+└── GenericCliAdapter               # Any CLI tool (subprocess + stdin)
 ```
 
-### Generic CLI Adapter
+### Generic API Adapter (`--adapter api`)
 
-For any CLI that accepts a prompt and returns text. The system prompt is embedded in the user prompt (since most CLIs don't support inline system prompts). Prompt is passed as the last CLI argument.
+Works with any provider offering an OpenAI-compatible chat completions endpoint.
+Uses the `openai` SDK with provider-specific base URLs.
 
 ```bash
+# OpenAI
+mhd-bench evaluate corpus/ --adapter api --provider openai --model gpt-4o --api-key sk-...
+
+# Gemini (via OpenAI-compatible endpoint)
+mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key AI...
+
+# Mistral
+mhd-bench evaluate corpus/ --adapter api --provider mistral --model devstral --api-key ...
+
+# Groq
+mhd-bench evaluate corpus/ --adapter api --provider groq --model llama-3.3-70b-versatile --api-key ...
+
+# Local (ollama, vLLM) — no API key needed
+mhd-bench evaluate corpus/ --adapter api --api-base http://localhost:11434/v1 --model llama3
+```
+
+### Generic CLI Adapter (`--adapter cli`)
+
+For any CLI tool with a flat-rate subscription (no API key needed).
+Prompt sent via stdin; system prompt embedded in user prompt.
+
+```bash
+# Claude Code CLI
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus"
+
 # Gemini CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -p" --model gemini-2.5-pro
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -m gemini-2.5-flash -p"
 
 # OpenAI Codex CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec" --model gpt-5-codex
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec"
 
 # GitHub Copilot CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "copilot -p -s" --model claude-sonnet-4.5
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "copilot -p -s"
 
 # Mistral Vibe CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "vibe --prompt" --model devstral
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "vibe --prompt"
+```
 
-# Any other CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "my-tool --quiet" --model my-model
+### Custom Adapters
+
+For fine-tuned BERT, CRF, or other local models — implement the `ModelAdapter` interface:
+
+```python
+class MyModelAdapter(ModelAdapter):
+    @property
+    def name(self) -> str:
+        return "my-model"
+
+    def predict(self, document: Document) -> list[str]:
+        # Return one MHDBDB tag per document.mappable_tokens
+        return [self.model.predict(t.form_for_tagging) for t in document.mappable_tokens]
 ```
 
 ## Dependencies
@@ -243,19 +275,19 @@ mhd-bench evaluate corpus/ --adapter cli --cli-cmd "my-tool --quiet" --model my-
 | pyyaml | YAML mapping file | ≥6.0 |
 | scikit-learn | Metrics (P/R/F1, confusion) | ≥1.4 |
 | rich | Console tables | ≥13.0 |
-| google-genai | Gemini API (optional) | ≥1.0 |
+| openai | LLM API adapter (optional) | ≥1.0 |
 
 Python ≥3.13 required.
 
 ## Tests
 
-82 tests in `tests/`:
+77 tests in `tests/`:
 - `test_rem_parser.py` (6) — fixture-based, covers simple + multi-mod + metadata
 - `test_tagset_mapper.py` (12) — all suffix patterns, unmappable, unknown tags
 - `test_metrics.py` (4) — perfect/partial accuracy, token counts, confusion shape
-- `test_cli_adapters.py` (16) — parse_tag_response (6), ClaudeCliAdapter (10): predict, retry, timeout, cache, chunking
-- `test_gemini_adapter.py` (8) — name, predict, caching, chunking, API key, retries (mocked SDK)
-- `test_generic_cli.py` (17) — GenericCliAdapter (15): predict, naming, prompt passing, system prompt embedding, retries, caching, chunking, CLI integration (2)
+- `test_cli_adapters.py` (8) — parse_tag_response: valid/invalid JSON, fences, counts, trailing text
+- `test_generic_api.py` (11) — GenericApiAdapter: providers, predict, caching, chunking, retries, local endpoint
+- `test_generic_cli.py` (17) — GenericCliAdapter: predict, stdin prompt, retries, caching, chunking, CLI integration
 - `test_cli.py` (13) — CLI integration via CliRunner: parse, mapping, evaluate, compare, version
 - `test_report.py` (5) — print_report, save_json, JSON schema, directory creation
 
