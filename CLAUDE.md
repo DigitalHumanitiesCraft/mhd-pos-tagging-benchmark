@@ -33,11 +33,22 @@ The MHDBDB TEI repository (`../mhdbdb-tei-only/`) contains ~670 TEI-encoded MHG 
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest                          # 101 tests
+
+# Corpus
 mhd-bench parse ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --stats
 mhd-bench mapping --validate --corpus-dir ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/
-mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --adapter passthrough
+
+# Evaluate
+mhd-bench evaluate corpus/ --adapter passthrough --subset 3
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
+mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key --subset 3
+
+# Compare
+mhd-bench compare corpus/ --adapters passthrough,majority --subset 3
 ```
+
+Adapters: `passthrough`, `majority`, `api` (any OpenAI-compatible API), `cli` (any CLI tool)
 
 ## Hard Constraints
 
@@ -46,9 +57,10 @@ mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --adapter passthr
 - **ReM data is gitignored** — user downloads separately
 - **Tagset mapping YAML** is the single source of truth for HiTS→MHDBDB conversion
 - **Technology-agnostic** — adapter interface must support any POS tagger, not just LLMs
+- **Docs separation:** `docs/` = promptotyping docs, `docs/guides/` = user-facing guides
 
 ## Documentation
 
-Architecture, data model, pipeline → [ARCHITECTURE.md](docs/ARCHITECTURE.md)
-Requirements, user stories → [REQUIREMENTS.md](docs/REQUIREMENTS.md)
+Promptotyping docs: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [REQUIREMENTS.md](docs/REQUIREMENTS.md), [JOURNAL.md](docs/JOURNAL.md)
+User guides: [GETTING-STARTED.md](docs/guides/GETTING-STARTED.md), [MODEL-ADAPTER-GUIDE.md](docs/guides/MODEL-ADAPTER-GUIDE.md), [TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md)
 All docs → [README.md](README.md)
