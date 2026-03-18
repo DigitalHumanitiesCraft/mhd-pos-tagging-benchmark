@@ -11,7 +11,7 @@ from rich.table import Table
 
 console = Console()
 
-ADAPTER_CHOICES = ["passthrough", "majority", "gemini", "claude-cli"]
+ADAPTER_CHOICES = ["passthrough", "majority", "gemini", "claude-cli", "cli"]
 
 
 def _parse_and_map(corpus_dir: Path, subset: int | None = None):
@@ -44,7 +44,13 @@ def _resolve_api_key(api_key: str | None) -> str | None:
     return api_key
 
 
-def _make_adapter(name: str, documents: list, api_key: str | None = None):
+def _make_adapter(
+    name: str,
+    documents: list,
+    api_key: str | None = None,
+    cli_cmd: str | None = None,
+    model: str | None = None,
+):
     """Instantiate an adapter by name."""
     if name == "passthrough":
         from mhd_pos_benchmark.adapters.gold_passthrough import GoldPassthroughAdapter
@@ -64,6 +70,12 @@ def _make_adapter(name: str, documents: list, api_key: str | None = None):
         from mhd_pos_benchmark.adapters.claude_cli import ClaudeCliAdapter
 
         return ClaudeCliAdapter()
+    elif name == "cli":
+        from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
+
+        if not cli_cmd:
+            raise click.UsageError("--adapter cli requires --cli-cmd")
+        return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model)
     else:
         raise click.UsageError(f"Unknown adapter: {name}")
 
@@ -186,6 +198,19 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     is_flag=True,
     help="Skip documents that fail instead of aborting the run",
 )
+@click.option(
+    "--cli-cmd",
+    type=str,
+    default=None,
+    help="CLI command for --adapter cli (e.g. 'gemini -p', 'codex exec', 'copilot -p -s').",
+)
+@click.option(
+    "--model",
+    "model_name",
+    type=str,
+    default=None,
+    help="Model name for display/caching (e.g. 'gpt-4o', 'gemini-2.5-pro').",
+)
 def evaluate(
     corpus_dir: Path,
     adapter: str,
@@ -194,6 +219,8 @@ def evaluate(
     api_key: str | None,
     verbose: bool,
     continue_on_error: bool,
+    cli_cmd: str | None,
+    model_name: str | None,
 ) -> None:
     """Run evaluation pipeline on the corpus."""
     from rich.progress import Progress
@@ -207,7 +234,9 @@ def evaluate(
 
     api_key = _resolve_api_key(api_key)
     documents = _parse_and_map(corpus_dir, subset)
-    model = _make_adapter(adapter, documents, api_key=api_key)
+    model = _make_adapter(
+        adapter, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
+    )
 
     console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
     with Progress(console=console) as progress:
@@ -260,6 +289,19 @@ def evaluate(
     is_flag=True,
     help="Skip documents that fail instead of aborting the run",
 )
+@click.option(
+    "--cli-cmd",
+    type=str,
+    default=None,
+    help="CLI command for 'cli' adapter entries (e.g. 'gemini -p').",
+)
+@click.option(
+    "--model",
+    "model_name",
+    type=str,
+    default=None,
+    help="Model name for display/caching.",
+)
 def compare(
     corpus_dir: Path,
     adapters: str,
@@ -268,6 +310,8 @@ def compare(
     api_key: str | None,
     verbose: bool,
     continue_on_error: bool,
+    cli_cmd: str | None,
+    model_name: str | None,
 ) -> None:
     """Compare multiple adapters side-by-side."""
     import json
@@ -287,7 +331,9 @@ def compare(
 
     results: list[EvaluationResult] = []
     for name in adapter_names:
-        model = _make_adapter(name, documents, api_key=api_key)
+        model = _make_adapter(
+            name, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
+        )
         console.print(f"\nRunning: [bold]{model.name}[/bold]...")
         with Progress(console=console) as progress:
             task = progress.add_task(f"Evaluating {model.name}", total=len(documents))

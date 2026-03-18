@@ -175,7 +175,8 @@ src/mhd_pos_benchmark/
 │   ├── gold_passthrough.py  # Returns mapped ground truth
 │   ├── majority_class.py    # Most-frequent-tag baseline (18.4%)
 │   ├── gemini.py            # Gemini API adapter (google-genai SDK)
-│   ├── cli_base.py          # Shared base for CLI-subprocess adapters
+│   ├── generic_cli.py       # Generic CLI adapter (any CLI: gemini, codex, copilot, vibe)
+│   ├── cli_base.py          # Shared base for CLI adapters with system prompt flag
 │   ├── claude_cli.py        # Claude Code CLI adapter (claude -p)
 │   ├── prompt_template.py   # Shared prompt + response parsing for all LLMs
 │   └── cache.py             # JSONL result cache with config hash
@@ -194,9 +195,11 @@ mhd-bench evaluate <corpus_dir> --adapter NAME [--subset N] [--api-key] [-v]
 mhd-bench compare <corpus_dir> --adapters a,b [--subset N] [--api-key] [-v]
 ```
 
-Adapters: `passthrough`, `majority`, `gemini`, `claude-cli`
+Adapters: `passthrough`, `majority`, `gemini`, `claude-cli`, `cli`
 
 `--api-key`: bare flag → masked interactive prompt; with value → use directly; omitted → env var fallback. Key never touches disk.
+
+`--adapter cli --cli-cmd "CMD"`: generic adapter for any CLI tool. See examples below.
 
 ## Adapter Hierarchy
 
@@ -205,8 +208,30 @@ ModelAdapter (ABC)
 ├── GoldPassthroughAdapter          # Pipeline validation (100%)
 ├── MajorityClassAdapter            # Baseline (most frequent tag)
 ├── GeminiAdapter (API)             # google-genai SDK, needs GEMINI_API_KEY
-└── CliLlmAdapter (ABC)             # Subprocess-based, subscription auth
+├── GenericCliAdapter               # Any CLI: gemini, codex, copilot, vibe, ...
+└── CliLlmAdapter (ABC)             # Subprocess-based with system prompt flag
     └── ClaudeCliAdapter            # claude -p --model opus (default)
+```
+
+### Generic CLI Adapter
+
+For any CLI that accepts a prompt and returns text. The system prompt is embedded in the user prompt (since most CLIs don't support inline system prompts). Prompt is passed as the last CLI argument.
+
+```bash
+# Gemini CLI
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -p" --model gemini-2.5-pro
+
+# OpenAI Codex CLI
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec" --model gpt-5-codex
+
+# GitHub Copilot CLI
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "copilot -p -s" --model claude-sonnet-4.5
+
+# Mistral Vibe CLI
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "vibe --prompt" --model devstral
+
+# Any other CLI
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "my-tool --quiet" --model my-model
 ```
 
 ## Dependencies
@@ -218,19 +243,19 @@ ModelAdapter (ABC)
 | pyyaml | YAML mapping file | ≥6.0 |
 | scikit-learn | Metrics (P/R/F1, confusion) | ≥1.4 |
 | rich | Console tables | ≥13.0 |
-| tabulate | Table formatting | ≥0.9 |
 | google-genai | Gemini API (optional) | ≥1.0 |
 
 Python ≥3.13 required.
 
 ## Tests
 
-65 tests in `tests/`:
+82 tests in `tests/`:
 - `test_rem_parser.py` (6) — fixture-based, covers simple + multi-mod + metadata
 - `test_tagset_mapper.py` (12) — all suffix patterns, unmappable, unknown tags
 - `test_metrics.py` (4) — perfect/partial accuracy, token counts, confusion shape
 - `test_cli_adapters.py` (16) — parse_tag_response (6), ClaudeCliAdapter (10): predict, retry, timeout, cache, chunking
 - `test_gemini_adapter.py` (8) — name, predict, caching, chunking, API key, retries (mocked SDK)
+- `test_generic_cli.py` (17) — GenericCliAdapter (15): predict, naming, prompt passing, system prompt embedding, retries, caching, chunking, CLI integration (2)
 - `test_cli.py` (13) — CLI integration via CliRunner: parse, mapping, evaluate, compare, version
 - `test_report.py` (5) — print_report, save_json, JSON schema, directory creation
 

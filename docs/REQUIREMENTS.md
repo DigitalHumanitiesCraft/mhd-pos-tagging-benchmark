@@ -35,12 +35,76 @@ Plug in **any** POS tagger — LLM, encoder model, classical — via the adapter
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E2.1 | As a researcher, I want to plug in any POS tagger via a simple adapter interface (input: tokens, output: tags), so that the benchmark is fully technology-agnostic — LLMs, encoder models (BERT-style), fine-tuned classifiers, CRF/HMM, anything | Must | Done (4 adapters: passthrough, majority, gemini, claude-cli) |
+| E2.1 | As a researcher, I want to plug in any POS tagger via a simple adapter interface (input: tokens, output: tags), so that the benchmark is fully technology-agnostic — LLMs, encoder models (BERT-style), fine-tuned classifiers, CRF/HMM, anything | Must | Done (adapter ABC + 4 concrete: passthrough, majority, gemini, claude-cli). **But:** only Claude CLI and Gemini API actually work — no generic access for other LLMs. → E5 closes this gap |
 | E2.2 | As a researcher, I want to evaluate at least one frontier LLM (Gemini or Claude), so that I can measure generative model performance on MHG POS | Must | Ready (Gemini API + Claude CLI adapters built, not yet run on full corpus) |
 | E2.3 | As a researcher, I want to evaluate at least one open-source/self-trained model, so that the paper has a non-commercial baseline | Must | Open |
 | E2.4 | As a researcher, I want result caching (JSONL per document+model+version), so that I don't re-run expensive evaluations | Must | Done (config hash, length validation, corrupt-line recovery) |
 | E2.5 | As a researcher, I want `mhd-bench compare` to show a side-by-side table of multiple models, so that I can quickly see which model wins on which tags | Should | Done |
 | E2.6 | As a researcher, I want a configurable prompt template for LLM-based adapters (derived from MHDBDB pos-disambiguator skill), so that LLMs get comparable instructions | Should | Done (shared prompt_template.py with MHG-specific system prompt) |
+
+### E5: Universal Model Access (Phase 2)
+
+Make the "technology-agnostic" claim real. A user who clones the repo should be able to benchmark **any** LLM — via API key, via CLI subscription, or via custom code — without modifying the benchmark source.
+
+Three access paths:
+
+```
+                        ┌─────────────────────────┐
+                        │   ModelAdapter (ABC)     │
+                        │   .predict(doc) → tags   │
+                        └────────┬────────────────┘
+               ┌─────────────────┼──────────────────┐
+               ▼                 ▼                    ▼
+    ┌──────────────────┐ ┌───────────────┐ ┌──────────────────┐
+    │ OpenAI-compat API│ │ Generic CLI   │ │ Custom adapter   │
+    │ --adapter openai │ │ --adapter cli │ │ (user writes     │
+    │ --model gpt-4o   │ │ --cli-cmd ... │ │  Python class)   │
+    │ --base-url ...   │ │               │ │                  │
+    └──────────────────┘ └───────────────┘ └──────────────────┘
+    OpenAI, Mistral,     Claude Code,       BERT, CRF, HMM,
+    Anthropic, Ollama,   Codex CLI,         fine-tuned models,
+    vLLM, LiteLLM,      Vibe CLI,          anything with
+    any /v1/chat/        Gemini CLI,        Python bindings
+    completions endpoint any stdin→stdout
+```
+
+| ID | User Story | Priority | Status |
+|----|-----------|----------|--------|
+| E5.1 | As a researcher with an API key (OpenAI, Mistral, Anthropic, or any OpenAI-compatible endpoint), I want to benchmark my model with `--adapter openai --model MODEL --api-key KEY`, so that I don't need to write code or understand the adapter interface | Must | Open |
+| E5.2 | As a researcher with a CLI subscription (Codex, Vibe CLI, Gemini CLI, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --cli-cmd CMD`, so that I can use any CLI-based LLM without writing an adapter | Must | Open |
+| E5.3 | As a developer with a custom model (fine-tuned BERT, CRF, HMM, or any model with Python bindings), I want a MODEL-ADAPTER-GUIDE.md with a working example, so that I can write a `ModelAdapter` subclass and plug it in without reading the full codebase | Must | Open |
+| E5.4 | As a researcher, I want `--base-url` support for the OpenAI-compatible adapter, so that I can point it at Ollama (`localhost:11434`), vLLM, LiteLLM, or any self-hosted endpoint | Should | Open |
+| E5.5 | As a researcher, I want the shared MHG system prompt and response parsing used by all LLM adapters (API and CLI), so that prompt differences don't confound model comparison | Must | Open (partially done: prompt_template.py exists but only wired to Gemini + Claude) |
+| E5.6 | As a researcher, I want `--adapter openai --model MODEL` to work with just an env var (`OPENAI_API_KEY`, `MISTRAL_API_KEY`, etc.) and no `--base-url` for the big providers (OpenAI, Mistral, Anthropic), so that the common case is zero-config | Should | Open |
+
+**Acceptance criteria:**
+
+```bash
+# API key users — zero-code, works out of the box
+mhd-bench evaluate corpus/ --adapter openai --model gpt-4o --api-key sk-...
+mhd-bench evaluate corpus/ --adapter openai --model mistral-large \
+  --base-url https://api.mistral.ai/v1 --api-key ...
+mhd-bench evaluate corpus/ --adapter openai --model llama3 \
+  --base-url http://localhost:11434/v1   # Ollama, no key needed
+
+# CLI subscription users — zero-code, works out of the box
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex --quiet"
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "mistral"
+mhd-bench evaluate corpus/ --adapter claude-cli   # existing, stays
+
+# Custom model users — write a Python class, register via entry point
+# (documented in MODEL-ADAPTER-GUIDE.md with copy-paste example)
+mhd-bench evaluate corpus/ --adapter my_package.MyBertAdapter
+
+# Compare across all three access paths in one command
+mhd-bench compare corpus/ --adapters openai:gpt-4o,cli:codex,claude-cli
+```
+
+**Design notes:**
+- The `openai` adapter wraps the OpenAI Python SDK (`openai>=1.0`), which already supports any `/v1/chat/completions` endpoint via `base_url`. This covers OpenAI, Mistral, Anthropic (via compatibility layer), Ollama, vLLM, LiteLLM, and dozens more.
+- The `cli` adapter generalizes `CliLlmAdapter`: configurable command, stdin for prompt, stdout parsed as text or JSON. The existing Claude CLI adapter stays as a concrete subclass for its JSON envelope format.
+- Custom adapters use a Python dotted path (`--adapter my_package.MyAdapter`) or setuptools entry points. MODEL-ADAPTER-GUIDE.md provides a 20-line copy-paste template.
+- All three paths share `prompt_template.py` (system prompt + response parsing + tag validation).
 
 ### E3: Analysis & Publication (Phase 2–3)
 
@@ -58,10 +122,10 @@ Deeper analysis for the paper.
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (39 tests, coverage not measured) |
+| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (65 tests, coverage not measured) |
 | E4.2 | As a developer, I want JSON result output, so that results are machine-readable for downstream analysis | Must | Done |
 | E4.3 | As a researcher, I want the benchmark to handle the full ReM corpus (2.5M tokens) in under 5 minutes for the passthrough adapter | Should | Not benchmarked |
-| E4.4 | As a developer, I want a MODEL-ADAPTER-GUIDE.md, so that contributors can plug in new models without reading all the code | Could | Open |
+| E4.4 | As a developer, I want a MODEL-ADAPTER-GUIDE.md, so that contributors can plug in new models without reading all the code | ~~Could~~ Must | Open → moved to E5.3 (upgraded to Must) |
 
 ## Success Criteria
 
@@ -73,13 +137,15 @@ Deeper analysis for the paper.
 4. Confusion matrix showing systematic error patterns
 5. Exclusion rate and reasons documented (currently 17.7%: punctuation, untagged, FM, KO*)
 6. Known limitations section: VA*→VEX overcount, no IPA mapping, KO* excluded
+7. **A user can clone the repo and benchmark any LLM** (via API key, CLI subscription, or custom adapter) without modifying benchmark source code (E5)
 
 ### Stretch Goals
 
 - Per-genre analysis (Vers vs. Prosa)
 - Overlap subset analysis (ReM ∩ MHDBDB)
-- >5 models compared
+- \>5 models compared
 - Context-sensitive KO* resolution
+- Adapter auto-discovery via setuptools entry points (register custom adapters without editing cli.py)
 
 ## Known Constraints
 
