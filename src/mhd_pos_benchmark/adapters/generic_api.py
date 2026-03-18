@@ -173,7 +173,7 @@ class GenericApiAdapter(ModelAdapter):
                     "Attempt %d/%d failed: %s", attempt, self._max_retries, e
                 )
                 if attempt < self._max_retries:
-                    time.sleep(2 ** attempt)
+                    time.sleep(min(2 ** attempt, 60))
 
             except OSError as e:
                 last_error = e
@@ -181,7 +181,7 @@ class GenericApiAdapter(ModelAdapter):
                     "API error attempt %d/%d: %s", attempt, self._max_retries, e
                 )
                 if attempt < self._max_retries:
-                    time.sleep(2 ** attempt)
+                    time.sleep(min(2 ** attempt, 60))
 
         raise RuntimeError(
             f"Failed after {self._max_retries} attempts: {last_error}"

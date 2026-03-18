@@ -194,7 +194,7 @@ class GenericCliAdapter(ModelAdapter):
                 )
 
             if attempt < self._max_retries:
-                time.sleep(2 ** attempt)
+                time.sleep(min(2 ** attempt, 60))
 
         raise RuntimeError(
             f"Failed after {self._max_retries} attempts: {last_error}"

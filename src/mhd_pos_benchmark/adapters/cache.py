@@ -6,8 +6,6 @@ Cache key: (adapter_name, document_id). Cache dir: results/<adapter_name>/
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 import hashlib
 import json
 import logging

@@ -32,6 +32,11 @@ def _parse_and_map(corpus_dir: Path, subset: int | None = None):
 
         documents = select_subset(documents, n=subset)
         console.print("\n[bold]Subset selected:[/bold]")
+        if len(documents) < subset:
+            console.print(
+                f"[yellow]Note: requested {subset} documents, "
+                f"got {len(documents)} (genre-stratified sampling)[/yellow]"
+            )
         console.print(describe_subset(documents))
 
     return documents

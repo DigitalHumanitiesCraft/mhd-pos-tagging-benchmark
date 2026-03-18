@@ -17,4 +17,5 @@ class GoldPassthroughAdapter(ModelAdapter):
         return "gold-passthrough"
 
     def predict(self, document: Document) -> list[str]:
-        return [t.pos_mhdbdb for t in document.mappable_tokens]
+        # mappable_tokens guarantees pos_mhdbdb is not None
+        return [t.pos_mhdbdb for t in document.mappable_tokens]  # type: ignore[misc]

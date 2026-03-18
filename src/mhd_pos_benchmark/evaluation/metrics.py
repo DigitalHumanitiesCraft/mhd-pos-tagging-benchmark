@@ -94,5 +94,5 @@ def compute_metrics(
         total_tokens=total_tokens,
         evaluated_tokens=len(gold_tags),
         excluded_tokens=excluded_tokens,
-        documents_evaluated=len(results),
+        documents_evaluated=sum(1 for r in results if r.pairs),
     )
