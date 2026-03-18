@@ -12,7 +12,7 @@ import uuid
 
 import pytest
 
-from mhd_pos_benchmark.adapters.prompt_template import VALID_TAGS, parse_tag_response
+from mhd_pos_benchmark.adapters.prompt_template import parse_tag_response
 from mhd_pos_benchmark.data.corpus import Document, Token
 
 
@@ -226,7 +226,7 @@ def test_availability_check_fails(monkeypatch, tmp_path):
 
     from mhd_pos_benchmark.adapters.claude_cli import ClaudeCliAdapter
 
-    with pytest.raises(EnvironmentError, match="Claude Code CLI not found"):
+    with pytest.raises(OSError, match="Claude Code CLI not found"):
         ClaudeCliAdapter(cache_dir=tmp_path)
 
 

@@ -1,5 +1,7 @@
 """Tests for evaluation metrics."""
 
+import warnings
+
 from mhd_pos_benchmark.evaluation.comparator import AlignedPair, AlignmentResult
 from mhd_pos_benchmark.evaluation.metrics import compute_metrics
 
@@ -39,7 +41,9 @@ def test_partial_accuracy():
 
 def test_token_counts():
     pairs = [AlignedPair("t1", "x", "x", "NOM", "NOM")]
-    result = compute_metrics([_make_result(pairs, total=10, excluded=9)], "test")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        result = compute_metrics([_make_result(pairs, total=10, excluded=9)], "test")
     assert result.total_tokens == 10
     assert result.evaluated_tokens == 1
     assert result.excluded_tokens == 9

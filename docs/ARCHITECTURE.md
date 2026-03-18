@@ -63,7 +63,9 @@ Token:
     pos_hits: str              # from <pos tag="..."> — e.g., "DDART", "VVFIN"
     pos_mhdbdb: str | None     # mapped tag — e.g., "DET", "VRB", or None (excluded)
     lemma: str | None          # from <lemma tag="...">
+    is_multimod: bool          # True if sub-token of a clitic (>1 tok_anno)
 
+    .form_for_tagging → str    # modernized for clitics, diplomatic otherwise
     .is_mappable → bool        # pos_mhdbdb is not None
 ```
 
@@ -223,10 +225,13 @@ Python ≥3.13 required.
 
 ## Tests
 
-39 tests in `tests/`:
+65 tests in `tests/`:
 - `test_rem_parser.py` (6) — fixture-based, covers simple + multi-mod + metadata
 - `test_tagset_mapper.py` (12) — all suffix patterns, unmappable, unknown tags
 - `test_metrics.py` (4) — perfect/partial accuracy, token counts, confusion shape
-- `test_cli_adapters.py` (17) — parse_tag_response (6), ClaudeCliAdapter (11): predict, retry, timeout, cache, chunking
+- `test_cli_adapters.py` (16) — parse_tag_response (6), ClaudeCliAdapter (10): predict, retry, timeout, cache, chunking
+- `test_gemini_adapter.py` (8) — name, predict, caching, chunking, API key, retries (mocked SDK)
+- `test_cli.py` (13) — CLI integration via CliRunner: parse, mapping, evaluate, compare, version
+- `test_report.py` (5) — print_report, save_json, JSON schema, directory creation
 
-Fixture: `tests/fixtures/sample_cora.xml` (8 tokens: NA, VVFIN, APPR, DDART, NA, clitic APPR+DDART, $_, FM)
+Fixture: `tests/fixtures/sample_cora.xml` (9 tokens: NA, VVFIN, APPR, DDART, NA, clitic APPR+DDART, $_, FM)

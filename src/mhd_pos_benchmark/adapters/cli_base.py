@@ -48,7 +48,7 @@ class CliLlmAdapter(ModelAdapter):
 
         available, msg = self._check_availability()
         if not available:
-            raise EnvironmentError(msg)
+            raise OSError(msg)
 
     @property
     def name(self) -> str:
@@ -72,7 +72,7 @@ class CliLlmAdapter(ModelAdapter):
         if cached is not None:
             logger.info("Cache hit for %s", document.id)
             return cached
-        forms = [t.form_diplomatic for t in mappable]
+        forms = [t.form_for_tagging for t in mappable]
 
         if not forms:
             return []

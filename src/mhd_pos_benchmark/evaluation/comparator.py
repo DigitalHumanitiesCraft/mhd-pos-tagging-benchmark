@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from mhd_pos_benchmark.adapters.base import ModelAdapter
@@ -77,6 +78,7 @@ def align_corpus(
     documents: list[Document],
     adapter: ModelAdapter,
     continue_on_error: bool = False,
+    progress_callback: Callable[[], None] | None = None,
 ) -> list[AlignmentResult]:
     """Run adapter on all documents and collect alignment results."""
     results: list[AlignmentResult] = []
@@ -88,4 +90,7 @@ def align_corpus(
                 logger.error("Skipping document %s: %s", doc.id, e)
             else:
                 raise
+        finally:
+            if progress_callback is not None:
+                progress_callback()
     return results

@@ -68,13 +68,27 @@ class ResultCache:
         return cached
 
     def put(self, document_id: str, predictions: list[str]) -> None:
+        already_cached = document_id in self._cache
         self._cache[document_id] = predictions
-        entry = {"document_id": document_id, "predictions": predictions}
-        if self._config_hash:
-            entry["config_hash"] = self._config_hash
-        line = json.dumps(entry, ensure_ascii=False)
-        with open(self._cache_file, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        if already_cached:
+            # Rewrite entire file to avoid duplicate entries
+            self._flush()
+        else:
+            entry = {"document_id": document_id, "predictions": predictions}
+            if self._config_hash:
+                entry["config_hash"] = self._config_hash
+            line = json.dumps(entry, ensure_ascii=False)
+            with open(self._cache_file, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+
+    def _flush(self) -> None:
+        """Rewrite the cache file from the in-memory dict (compaction)."""
+        with open(self._cache_file, "w", encoding="utf-8") as f:
+            for doc_id, preds in self._cache.items():
+                entry = {"document_id": doc_id, "predictions": preds}
+                if self._config_hash:
+                    entry["config_hash"] = self._config_hash
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def has(self, document_id: str) -> bool:
         return document_id in self._cache

@@ -31,7 +31,7 @@ def _parse_and_map(corpus_dir: Path, subset: int | None = None):
         from mhd_pos_benchmark.data.subset import describe_subset, select_subset
 
         documents = select_subset(documents, n=subset)
-        console.print(f"\n[bold]Subset selected:[/bold]")
+        console.print("\n[bold]Subset selected:[/bold]")
         console.print(describe_subset(documents))
 
     return documents
@@ -181,6 +181,11 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     help="API key for the adapter. Pass a value, or use bare --api-key to enter interactively (masked).",
 )
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
+@click.option(
+    "--continue-on-error",
+    is_flag=True,
+    help="Skip documents that fail instead of aborting the run",
+)
 def evaluate(
     corpus_dir: Path,
     adapter: str,
@@ -188,8 +193,11 @@ def evaluate(
     output: Path | None,
     api_key: str | None,
     verbose: bool,
+    continue_on_error: bool,
 ) -> None:
     """Run evaluation pipeline on the corpus."""
+    from rich.progress import Progress
+
     from mhd_pos_benchmark.evaluation.comparator import align_corpus
     from mhd_pos_benchmark.evaluation.metrics import compute_metrics
     from mhd_pos_benchmark.evaluation.report import print_report, save_json
@@ -202,7 +210,13 @@ def evaluate(
     model = _make_adapter(adapter, documents, api_key=api_key)
 
     console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
-    alignments = align_corpus(documents, model)
+    with Progress(console=console) as progress:
+        task = progress.add_task("Evaluating", total=len(documents))
+        alignments = align_corpus(
+            documents, model,
+            continue_on_error=continue_on_error,
+            progress_callback=lambda: progress.advance(task),
+        )
     result = compute_metrics(alignments, model.name)
 
     print_report(result, console)
@@ -241,6 +255,11 @@ def evaluate(
     help="API key for API-based adapters. Pass a value, or use bare --api-key to enter interactively (masked).",
 )
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
+@click.option(
+    "--continue-on-error",
+    is_flag=True,
+    help="Skip documents that fail instead of aborting the run",
+)
 def compare(
     corpus_dir: Path,
     adapters: str,
@@ -248,13 +267,16 @@ def compare(
     output: Path | None,
     api_key: str | None,
     verbose: bool,
+    continue_on_error: bool,
 ) -> None:
     """Compare multiple adapters side-by-side."""
     import json
 
+    from rich.progress import Progress
+
     from mhd_pos_benchmark.evaluation.comparator import align_corpus
     from mhd_pos_benchmark.evaluation.metrics import EvaluationResult, compute_metrics
-    from mhd_pos_benchmark.evaluation.report import print_report, save_json
+    from mhd_pos_benchmark.evaluation.report import print_report
 
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
@@ -267,7 +289,13 @@ def compare(
     for name in adapter_names:
         model = _make_adapter(name, documents, api_key=api_key)
         console.print(f"\nRunning: [bold]{model.name}[/bold]...")
-        alignments = align_corpus(documents, model)
+        with Progress(console=console) as progress:
+            task = progress.add_task(f"Evaluating {model.name}", total=len(documents))
+            alignments = align_corpus(
+                documents, model,
+                continue_on_error=continue_on_error,
+                progress_callback=lambda: progress.advance(task),
+            )
         result = compute_metrics(alignments, model.name)
         results.append(result)
         print_report(result, console)

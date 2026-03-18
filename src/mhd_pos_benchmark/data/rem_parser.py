@@ -72,7 +72,11 @@ def _parse_token(token_el: etree._Element) -> list[Token]:
     dipl_el = token_el.find("tok_dipl")
     dipl_utf = dipl_el.get("utf", "") if dipl_el is not None else ""
 
-    for anno_el in token_el.findall("tok_anno"):
+    # Detect multi-mod (clitic) tokens: >1 tok_anno under one <token>
+    anno_elements = token_el.findall("tok_anno")
+    is_multimod = len(anno_elements) > 1
+
+    for anno_el in anno_elements:
         pos_el = anno_el.find("pos")
         if pos_el is None:
             skipped += 1
@@ -95,6 +99,7 @@ def _parse_token(token_el: etree._Element) -> list[Token]:
             form_modernized=mod_utf,
             pos_hits=pos_tag,
             lemma=lemma,
+            is_multimod=is_multimod,
         ))
 
     if skipped:

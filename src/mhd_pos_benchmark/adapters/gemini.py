@@ -37,7 +37,7 @@ class GeminiAdapter(ModelAdapter):
     ) -> None:
         api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            raise EnvironmentError(
+            raise OSError(
                 "No API key provided. Use --api-key or set GEMINI_API_KEY. "
                 "Get a key at https://aistudio.google.com/apikey"
             )
@@ -50,11 +50,11 @@ class GeminiAdapter(ModelAdapter):
         self._temperature = temperature
         self._max_retries = max_retries
         config_hash = ResultCache.make_config_hash(chunk_size, SYSTEM_PROMPT)
-        self._cache = ResultCache(f"gemini-{model}", cache_dir, config_hash=config_hash)
+        self._cache = ResultCache(self.name, cache_dir, config_hash=config_hash)
 
     @property
     def name(self) -> str:
-        return f"gemini-{self._model}"
+        return self._model
 
     def predict(self, document: Document) -> list[str]:
         mappable = document.mappable_tokens
@@ -62,7 +62,7 @@ class GeminiAdapter(ModelAdapter):
         if cached is not None:
             logger.info("Cache hit for %s", document.id)
             return cached
-        forms = [t.form_diplomatic for t in mappable]
+        forms = [t.form_for_tagging for t in mappable]
 
         if not forms:
             return []
@@ -120,7 +120,7 @@ class GeminiAdapter(ModelAdapter):
                 if attempt < self._max_retries:
                     time.sleep(2 ** attempt)
 
-            except Exception as e:
+            except OSError as e:
                 last_error = e
                 logger.warning(
                     "API error attempt %d/%d: %s", attempt, self._max_retries, e

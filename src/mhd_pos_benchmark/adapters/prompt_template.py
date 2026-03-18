@@ -115,7 +115,7 @@ def build_tagging_prompt(forms: list[str], context_window: int = 0) -> str:
     """Build the user prompt with the token list.
 
     Args:
-        forms: List of diplomatic word forms to tag.
+        forms: Word forms to tag (diplomatic for regular tokens, modernized for clitics).
         context_window: Not used yet — reserved for future windowed processing.
 
     Returns:
