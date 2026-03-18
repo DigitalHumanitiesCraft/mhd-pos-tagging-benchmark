@@ -1,15 +1,16 @@
 """Generic CLI adapter — POS tagging via any LLM CLI tool.
 
 Works with any CLI that accepts a prompt and returns text:
-  - Gemini CLI:  gemini -p
+  - Gemini CLI:  gemini -m gemini-2.5-flash -p
   - Codex CLI:   codex exec
   - Copilot CLI: copilot -p -s
   - Vibe CLI:    vibe --prompt
   - Any other:   mycli --flag
 
 Since most CLIs don't support inline system prompts, the system prompt
-is embedded into the user prompt. The CLI receives one combined prompt
-as its final argument and returns text on stdout.
+is embedded into the user prompt. The prompt is sent via stdin (avoids
+argument-length limits and shell-escaping issues on Windows). CLIs that
+need a prompt flag (like `-p`) should use `-p ""` — stdin is appended.
 """
 
 from __future__ import annotations
@@ -34,8 +35,17 @@ logger = logging.getLogger(__name__)
 
 
 def _build_combined_prompt(system_prompt: str, user_prompt: str) -> str:
-    """Embed system prompt into user prompt for CLIs without system prompt support."""
-    return f"{system_prompt}\n\n---\n\n{user_prompt}"
+    """Embed system prompt into user prompt for CLIs without system prompt support.
+
+    Task-first structure: the immediate task comes first so agentic CLIs
+    (Gemini, Codex, Copilot) execute it instead of treating the prompt
+    as session setup. The system prompt follows as reference material.
+    """
+    return (
+        f"{user_prompt}\n\n"
+        f"--- REFERENCE ---\n"
+        f"{system_prompt}"
+    )
 
 
 class GenericCliAdapter(ModelAdapter):
@@ -66,6 +76,10 @@ class GenericCliAdapter(ModelAdapter):
             raise ValueError("--cli-cmd must not be empty")
 
         self._executable = self._cli_parts[0]
+        # Resolve full path (needed on Windows for npm-installed .cmd wrappers)
+        resolved = shutil.which(self._executable)
+        if resolved:
+            self._cli_parts[0] = resolved
         self._model_name = model_name or f"cli-{self._executable}"
         self._chunk_size = chunk_size
         self._max_retries = max_retries
@@ -128,15 +142,26 @@ class GenericCliAdapter(ModelAdapter):
         return all_tags
 
     def _call_cli(self, user_prompt: str, expected_count: int) -> list[str]:
-        """Call the CLI tool with the combined prompt as the final argument."""
+        """Call the CLI tool with the combined prompt via stdin.
+
+        Prompt is sent via stdin rather than as a CLI argument to avoid
+        argument-length limits (Windows: ~8191 chars) and shell-escaping issues.
+        If the command ends with a prompt flag (e.g. -p, --prompt), an empty
+        string is appended so the flag gets a value and stdin provides the content.
+        """
         combined = _build_combined_prompt(SYSTEM_PROMPT, user_prompt)
-        cmd = [*self._cli_parts, combined]
+        cmd = list(self._cli_parts)
+        # If the last arg is a prompt flag, it needs a value — use empty string
+        # so the real content comes from stdin
+        if cmd[-1] in ("-p", "--prompt"):
+            cmd.append("")
         last_error: Exception | None = None
 
         for attempt in range(1, self._max_retries + 1):
             try:
                 result = subprocess.run(
                     cmd,
+                    input=combined,
                     capture_output=True,
                     encoding="utf-8",
                     timeout=self._timeout,

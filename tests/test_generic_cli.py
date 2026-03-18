@@ -63,11 +63,12 @@ class TestGenericCliAdapter:
         )
         assert adapter.name == "gemini-2.5-pro"
 
-    def test_prompt_passed_as_last_argument(self, monkeypatch, tmp_path):
+    def test_prompt_passed_via_stdin(self, monkeypatch, tmp_path):
+        """Prompt is sent via stdin, not as a CLI argument."""
         calls = []
 
         def fake_run(cmd, **kwargs):
-            calls.append(cmd)
+            calls.append((cmd, kwargs))
             return subprocess.CompletedProcess(
                 args=[], returncode=0,
                 stdout='["NOM"]', stderr="",
@@ -78,39 +79,17 @@ class TestGenericCliAdapter:
         doc = _make_document(1)
         adapter.predict(doc)
 
-        cmd = calls[0]
-        assert cmd[0] == "gemini"
-        assert cmd[1] == "-p"
-        # Last argument is the combined prompt (system + user)
-        assert "Tag each word" in cmd[-1]
-        assert "Middle High German" in cmd[-1]
+        cmd, kwargs = calls[0]
+        # -p flag gets empty string appended so stdin provides the content
+        assert "-p" in cmd
+        assert cmd[cmd.index("-p") + 1] == ""
+        # Prompt content goes via stdin (input kwarg)
+        stdin_text = kwargs["input"]
+        assert "Tag each word" in stdin_text
+        assert "Middle High German" in stdin_text
 
-    def test_system_prompt_embedded_in_user_prompt(self, monkeypatch, tmp_path):
-        calls = []
-
-        def fake_run(cmd, **kwargs):
-            calls.append(cmd)
-            return subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout='["NOM"]', stderr="",
-            )
-
-        monkeypatch.setattr("mhd_pos_benchmark.adapters.generic_cli.subprocess.run", fake_run)
-        adapter = _make_adapter(monkeypatch, tmp_path)
-        doc = _make_document(1)
-        adapter.predict(doc)
-
-        combined_prompt = calls[0][-1]
-        # System prompt content
-        assert "Valid Tags" in combined_prompt
-        assert "NOM" in combined_prompt
-        assert "VRB" in combined_prompt
-        # User prompt content
-        assert "Tag each word" in combined_prompt
-        assert "wort0" in combined_prompt
-
-    def test_no_stdin_used(self, monkeypatch, tmp_path):
-        """Generic CLI passes prompt as argument, not stdin."""
+    def test_system_prompt_embedded_in_stdin(self, monkeypatch, tmp_path):
+        """System prompt is embedded in the stdin prompt (task-first)."""
         calls = []
 
         def fake_run(cmd, **kwargs):
@@ -125,8 +104,36 @@ class TestGenericCliAdapter:
         doc = _make_document(1)
         adapter.predict(doc)
 
-        # No 'input' kwarg — prompt goes via cmd args, not stdin
-        assert "input" not in calls[0]
+        stdin_text = calls[0]["input"]
+        # Task comes first (task-first structure for agentic CLIs)
+        task_pos = stdin_text.index("Tag each word")
+        ref_pos = stdin_text.index("REFERENCE")
+        assert task_pos < ref_pos
+        # System prompt content
+        assert "Valid Tags" in stdin_text
+        assert "NOM" in stdin_text
+        assert "VRB" in stdin_text
+        # User prompt content
+        assert "wort0" in stdin_text
+
+    def test_stdin_used_for_prompt(self, monkeypatch, tmp_path):
+        """Generic CLI sends prompt via stdin (avoids argument-length limits)."""
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(kwargs)
+            return subprocess.CompletedProcess(
+                args=[], returncode=0,
+                stdout='["NOM"]', stderr="",
+            )
+
+        monkeypatch.setattr("mhd_pos_benchmark.adapters.generic_cli.subprocess.run", fake_run)
+        adapter = _make_adapter(monkeypatch, tmp_path)
+        doc = _make_document(1)
+        adapter.predict(doc)
+
+        assert "input" in calls[0]
+        assert "Tag each word" in calls[0]["input"]
 
     def test_retry_on_bad_response(self, monkeypatch, tmp_path):
         monkeypatch.setattr("mhd_pos_benchmark.adapters.generic_cli.time.sleep", lambda _: None)
@@ -250,7 +257,7 @@ class TestGenericCliAdapter:
         calls = []
 
         def fake_run(cmd, **kwargs):
-            calls.append(cmd)
+            calls.append((cmd, kwargs))
             return subprocess.CompletedProcess(
                 args=[], returncode=0,
                 stdout='["NOM"]', stderr="",
@@ -263,13 +270,13 @@ class TestGenericCliAdapter:
         doc = _make_document(1)
         adapter.predict(doc)
 
-        cmd = calls[0]
-        assert cmd[0] == "copilot"
-        assert cmd[1] == "-p"
-        assert cmd[2] == "-s"
-        assert cmd[3] == "--no-color"
-        # Last element is the prompt
-        assert "Tag each word" in cmd[4]
+        cmd, kwargs = calls[0]
+        # copilot resolved to /usr/bin/fakecli by mock, then -p gets empty string
+        assert "-p" in cmd
+        assert "-s" in cmd
+        assert "--no-color" in cmd
+        # Prompt via stdin
+        assert "Tag each word" in kwargs["input"]
 
     def test_handles_text_around_json(self, monkeypatch, tmp_path):
         """CLI might print extra text around the JSON array."""
