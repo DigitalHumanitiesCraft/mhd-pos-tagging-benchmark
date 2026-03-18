@@ -265,3 +265,35 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 - Vorkonfigurierte Presets? (`mhd-bench evaluate --preset gemini-quick` → setzt alles automatisch)
 
 **Ziel:** Ein/e Forscher/in mit ReM-Zugang und einem LLM-Account (z.B. Gemini, ChatGPT) soll den Benchmark nutzen können, ohne Python-Interna zu verstehen.
+
+## 2026-03-18 — handoff
+
+**Summary:** Massive session: full code review (2 colleague iterations, 26 issues fixed), adapter consolidation (5 specific → 2 generic), first real smoke tests (Claude Opus 4.6 vs Gemini 2.5 Pro vs Gemini 3.1 Pro Preview), E5 (Universal Model Access) completed, user docs restructured (compact README, Getting Started guide, Troubleshooting, Model Adapter Guide).
+
+**Phase:** Implementation (Phase 2 in progress). 13 docs, all current:
+- Knowledge: MHDBDB-TAGSET, HITS-TAGSET, CORA-XML-FORMAT, OVERLAP-TABLE
+- Architecture: ARCHITECTURE.md (updated: 2 generic adapters, 101 tests)
+- Requirements: REQUIREMENTS.md (E1 done, E2 mostly done, E5 done, E3 open)
+- Research: RESEARCH.md (citations unverified)
+- Mapping: TAGSET-MAPPING.md + hits_to_mhdbdb.yaml v0.2.0
+- Guides: GETTING-STARTED.md, TROUBLESHOOTING.md, MODEL-ADAPTER-GUIDE.md
+- Process: JOURNAL.md
+
+**Open issues:**
+- E2.3: No open-source/encoder model evaluated yet — paper needs min. 3 model categories
+- `compare` command can't compare two different LLMs in one call (global --cli-cmd/--model) — documented limitation
+- RESEARCH.md citations from web search, not verified against original papers
+- Prompt-Bias: system prompt contains MHG-specific hints that could confound model comparison
+- CLI-Adapter Temperature nicht kontrollierbar → Non-Determinismus im Paper diskutieren
+- GitHub contributors (michaelscho, wachauer) still not invited
+- 12 commits ahead of origin — not pushed
+
+**Next steps:**
+1. UX exploration: how to make benchmark usable for linguists without programming skills (see TODO 2026-03-19)
+2. E2.3: evaluate one open-source model (e.g. Llama 3 via ollama — infrastructure is ready)
+3. Larger benchmark run: `--subset 10` or more with Claude + Gemini for statistically meaningful results
+4. Verify RESEARCH.md citations against original papers before paper writing
+5. Push to origin: `git push`
+6. Invite GitHub contributors: michaelscho, wachauer
+
+**Git:** 12 commits on main, last `3ad336f`, 12 ahead of origin.
