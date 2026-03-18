@@ -6,9 +6,12 @@ Cache key: (adapter_name, document_id). Cache dir: results/<adapter_name>/
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
+import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -82,13 +85,26 @@ class ResultCache:
                 f.write(line + "\n")
 
     def _flush(self) -> None:
-        """Rewrite the cache file from the in-memory dict (compaction)."""
-        with open(self._cache_file, "w", encoding="utf-8") as f:
-            for doc_id, preds in self._cache.items():
-                entry = {"document_id": doc_id, "predictions": preds}
-                if self._config_hash:
-                    entry["config_hash"] = self._config_hash
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        """Rewrite the cache file from the in-memory dict (compaction).
+
+        Writes to a temporary file first, then renames atomically to avoid
+        data loss if the process crashes mid-write.
+        """
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=self._cache_dir, suffix=".tmp", prefix="predictions_",
+        )
+        try:
+            with open(tmp_fd, "w", encoding="utf-8") as f:
+                for doc_id, preds in self._cache.items():
+                    entry = {"document_id": doc_id, "predictions": preds}
+                    if self._config_hash:
+                        entry["config_hash"] = self._config_hash
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            Path(tmp_path).replace(self._cache_file)
+        except BaseException:
+            # Clean up temp file on failure
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
 
     def has(self, document_id: str) -> bool:
         return document_id in self._cache
@@ -98,7 +114,9 @@ class ResultCache:
         return len(self._cache)
 
     @staticmethod
-    def make_config_hash(chunk_size: int, prompt_text: str) -> str:
+    def make_config_hash(chunk_size: int, prompt_text: str, *, temperature: float | None = None) -> str:
         """Create a hash from configuration that affects results."""
         data = f"chunk_size={chunk_size}\nprompt={prompt_text}"
+        if temperature is not None:
+            data += f"\ntemperature={temperature}"
         return hashlib.sha256(data.encode()).hexdigest()[:12]

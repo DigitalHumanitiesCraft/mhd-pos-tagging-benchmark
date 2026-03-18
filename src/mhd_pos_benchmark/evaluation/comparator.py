@@ -42,9 +42,16 @@ def align_document(document: Document, adapter: ModelAdapter) -> AlignmentResult
     mappable = document.mappable_tokens
 
     if not mappable:
-        raise ValueError(
-            f"Document {document.id}: no mappable tokens — "
-            f"was map_document() called?"
+        logger.warning(
+            "Document %s: no mappable tokens (was map_document() called?) — "
+            "returning empty alignment",
+            document.id,
+        )
+        return AlignmentResult(
+            document_id=document.id,
+            pairs=[],
+            total_tokens=len(document.tokens),
+            excluded_tokens=len(document.tokens),
         )
 
     predictions = adapter.predict(document)

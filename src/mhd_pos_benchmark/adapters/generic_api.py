@@ -96,13 +96,19 @@ class GenericApiAdapter(ModelAdapter):
                     f"No API key provided. Use --api-key or set {env_var}."
                 )
 
-        from openai import OpenAI
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise ImportError(
+                "The 'openai' package is required for --adapter api. "
+                "Install with: pip install mhd-pos-benchmark[api]"
+            ) from None
 
         self._client = OpenAI(api_key=api_key, base_url=self._base_url)
         self._chunk_size = chunk_size
         self._temperature = temperature
         self._max_retries = max_retries
-        config_hash = ResultCache.make_config_hash(chunk_size, SYSTEM_PROMPT)
+        config_hash = ResultCache.make_config_hash(chunk_size, SYSTEM_PROMPT, temperature=temperature)
         self._cache = ResultCache(self.name, cache_dir, config_hash=config_hash)
 
     @property

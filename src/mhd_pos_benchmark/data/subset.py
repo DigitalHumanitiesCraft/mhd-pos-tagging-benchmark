@@ -47,12 +47,14 @@ def select_subset(
     # Adjust to hit exactly n
     total_allocated = sum(genre_counts.values())
     while total_allocated > n:
-        # Trim one from the largest genre (but never below 1)
-        largest = max(
-            (g for g in genre_counts if genre_counts[g] > 1),
-            key=lambda g: genre_counts[g],
-            default=max(genre_counts, key=lambda g: genre_counts[g]),
-        )
+        # Trim one from the largest genre (but never below 1, or 0 as last resort)
+        candidates = [g for g in genre_counts if genre_counts[g] > 1]
+        if not candidates:
+            # All genres are at 1 — must drop some to 0
+            candidates = [g for g in genre_counts if genre_counts[g] > 0]
+            if not candidates:
+                break
+        largest = max(candidates, key=lambda g: genre_counts[g])
         genre_counts[largest] -= 1
         total_allocated -= 1
 

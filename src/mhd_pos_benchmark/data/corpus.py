@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -26,7 +29,13 @@ class Token:
         since the diplomatic form is the unsplit combined form (e.g., 'inder')
         which would be misleading if sent once per sub-token.
         """
-        return self.form_modernized if self.is_multimod else self.form_diplomatic
+        result = self.form_modernized if self.is_multimod else self.form_diplomatic
+        if not result:
+            logger.debug(
+                "Token %s has empty form_for_tagging (diplomatic=%r, modernized=%r, multimod=%s)",
+                self.id, self.form_diplomatic, self.form_modernized, self.is_multimod,
+            )
+        return result
 
     @property
     def is_mappable(self) -> bool:

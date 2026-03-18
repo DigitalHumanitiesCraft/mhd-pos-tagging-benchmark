@@ -65,10 +65,14 @@ def _make_adapter(
         console.print(f"Majority tag: [bold]{adapter.majority_tag}[/bold]")
         return adapter
     elif name == "api":
-        from mhd_pos_benchmark.adapters.generic_api import GenericApiAdapter
+        from mhd_pos_benchmark.adapters.generic_api import PROVIDERS, GenericApiAdapter
 
+        effective_provider = provider or "openai"
+        if model is None:
+            default_model = PROVIDERS.get(effective_provider, {}).get("default_model", "gpt-4o")
+            console.print(f"No --model specified, using default: [bold]{default_model}[/bold]")
         return GenericApiAdapter(
-            provider=provider or "openai",
+            provider=effective_provider,
             model=model,
             api_key=api_key,
             api_base=api_base,
@@ -80,7 +84,21 @@ def _make_adapter(
             raise click.UsageError("--adapter cli requires --cli-cmd")
         return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model)
     else:
-        raise click.UsageError(f"Unknown adapter: {name}")
+        suggestions = {
+            "gemini": "Use '--adapter api --provider gemini' for Gemini API, or '--adapter cli --cli-cmd \"gemini -p\"' for Gemini CLI.",
+            "openai": "Use '--adapter api --provider openai' for OpenAI API.",
+            "gpt": "Use '--adapter api --provider openai' for OpenAI API.",
+            "mistral": "Use '--adapter api --provider mistral' for Mistral API.",
+            "groq": "Use '--adapter api --provider groq' for Groq API.",
+            "claude": "Use '--adapter cli --cli-cmd \"claude -p\"' for Claude CLI.",
+            "codex": "Use '--adapter cli --cli-cmd \"codex exec\"' for Codex CLI.",
+            "copilot": "Use '--adapter cli --cli-cmd \"copilot -p -s\"' for Copilot CLI.",
+        }
+        hint = suggestions.get(name.lower(), "")
+        msg = f"Unknown adapter: {name}. Valid adapters: {', '.join(ADAPTER_CHOICES)}."
+        if hint:
+            msg += f"\n  Hint: {hint}"
+        raise click.UsageError(msg)
 
 
 @click.group()
@@ -345,7 +363,13 @@ def compare(
     provider: str | None,
     api_base: str | None,
 ) -> None:
-    """Compare multiple adapters side-by-side."""
+    """Compare multiple adapters side-by-side.
+
+    Works best with baselines (passthrough, majority) or cached results
+    from separate evaluate runs. Running multiple API/CLI adapters in one
+    compare call is possible but slower — consider running evaluate for each
+    adapter first, then comparing the cached results.
+    """
     import json
 
     from rich.progress import Progress
