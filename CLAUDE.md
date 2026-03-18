@@ -2,7 +2,7 @@
 
 ## Project in One Paragraph
 
-**Which model tags Middle High German POS best?** This benchmark answers that question by enabling direct head-to-head comparison of any POS tagger against a validated ground truth. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) with hand-annotated HiTS POS tags (73 tags), mapped to the MHDBDB tagset (19 defined, 16 evaluable — CNJ, IPA, DIG have no HiTS source). Technology-agnostic: the same adapter interface works for frontier LLMs (currently Gemini 3.1 Pro, Claude Opus 4.6), open-source models, encoder models, or classical taggers. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Before this benchmark, there was no way to objectively compare — the ground truth pipeline makes it possible.
+**Which model tags Middle High German POS best?** This benchmark answers that question by enabling direct head-to-head comparison of any POS tagger against a validated ground truth. Uses the ReM (Referenzkorpus Mittelhochdeutsch, v2.1) with hand-annotated HiTS POS tags (73 tags), mapped to the MHDBDB tagset (19 defined, 16 evaluable — CNJ, IPA, DIG have no HiTS source). Technology-agnostic: two generic adapters (`--adapter api` for any OpenAI-compatible API, `--adapter cli` for any CLI tool) plus custom Python adapters. Tested with Claude Opus 4.6, Gemini 2.5 Pro, Gemini 3.1 Pro Preview. Outputs accuracy, per-tag P/R/F1, and confusion matrices. Before this benchmark, there was no way to objectively compare — the ground truth pipeline makes it possible.
 
 ## Team
 

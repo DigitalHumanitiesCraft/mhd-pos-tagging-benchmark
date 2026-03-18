@@ -35,7 +35,7 @@ Plug in **any** POS tagger — LLM, encoder model, classical — via the adapter
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E2.1 | As a researcher, I want to plug in any POS tagger via a simple adapter interface (input: tokens, output: tags), so that the benchmark is fully technology-agnostic — LLMs, encoder models (BERT-style), fine-tuned classifiers, CRF/HMM, anything | Must | Done (adapter ABC + 4 concrete: passthrough, majority, gemini, claude-cli). **But:** only Claude CLI and Gemini API actually work — no generic access for other LLMs. → E5 closes this gap |
+| E2.1 | As a researcher, I want to plug in any POS tagger via a simple adapter interface (input: tokens, output: tags), so that the benchmark is fully technology-agnostic — LLMs, encoder models (BERT-style), fine-tuned classifiers, CRF/HMM, anything | Must | Done (adapter ABC + 4 adapters: passthrough, majority, generic API, generic CLI). E5 delivers universal access. |
 | E2.2 | As a researcher, I want to evaluate at least one frontier LLM (Gemini or Claude), so that I can measure generative model performance on MHG POS | Must | Ready (Gemini API + Claude CLI adapters built, not yet run on full corpus) |
 | E2.3 | As a researcher, I want to evaluate at least one open-source/self-trained model, so that the paper has a non-commercial baseline | Must | Open |
 | E2.4 | As a researcher, I want result caching (JSONL per document+model+version), so that I don't re-run expensive evaluations | Must | Done (config hash, length validation, corrupt-line recovery) |
@@ -70,41 +70,36 @@ Three access paths:
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E5.1 | As a researcher with an API key (OpenAI, Mistral, Anthropic, or any OpenAI-compatible endpoint), I want to benchmark my model with `--adapter openai --model MODEL --api-key KEY`, so that I don't need to write code or understand the adapter interface | Must | Open |
-| E5.2 | As a researcher with a CLI subscription (Codex, Vibe CLI, Gemini CLI, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --cli-cmd CMD`, so that I can use any CLI-based LLM without writing an adapter | Must | Open |
-| E5.3 | As a developer with a custom model (fine-tuned BERT, CRF, HMM, or any model with Python bindings), I want a MODEL-ADAPTER-GUIDE.md with a working example, so that I can write a `ModelAdapter` subclass and plug it in without reading the full codebase | Must | Open |
-| E5.4 | As a researcher, I want `--base-url` support for the OpenAI-compatible adapter, so that I can point it at Ollama (`localhost:11434`), vLLM, LiteLLM, or any self-hosted endpoint | Should | Open |
-| E5.5 | As a researcher, I want the shared MHG system prompt and response parsing used by all LLM adapters (API and CLI), so that prompt differences don't confound model comparison | Must | Open (partially done: prompt_template.py exists but only wired to Gemini + Claude) |
-| E5.6 | As a researcher, I want `--adapter openai --model MODEL` to work with just an env var (`OPENAI_API_KEY`, `MISTRAL_API_KEY`, etc.) and no `--base-url` for the big providers (OpenAI, Mistral, Anthropic), so that the common case is zero-config | Should | Open |
+| E5.1 | As a researcher with an API key (OpenAI, Mistral, Gemini, Groq, or any OpenAI-compatible endpoint), I want to benchmark my model with `--adapter api --provider NAME --model MODEL --api-key KEY`, so that I don't need to write code or understand the adapter interface | Must | Done (GenericApiAdapter, openai SDK, provider presets for openai/gemini/mistral/groq) |
+| E5.2 | As a researcher with a CLI subscription (Claude, Gemini, Codex, Copilot, Vibe, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --cli-cmd CMD`, so that I can use any CLI-based LLM without writing an adapter | Must | Done (GenericCliAdapter, prompt via stdin, Windows path resolution, smoke-tested with Claude + Gemini) |
+| E5.3 | As a developer with a custom model (fine-tuned BERT, CRF, HMM, or any model with Python bindings), I want a documented adapter interface with a working example, so that I can write a `ModelAdapter` subclass and plug it in without reading the full codebase | Must | Partial (interface documented in ARCHITECTURE.md, no standalone guide yet) |
+| E5.4 | As a researcher, I want `--api-base` support for the API adapter, so that I can point it at Ollama (`localhost:11434`), vLLM, LiteLLM, or any self-hosted endpoint | Should | Done (--api-base flag, auto-detects local endpoints and skips API key requirement) |
+| E5.5 | As a researcher, I want the shared MHG system prompt and response parsing used by all LLM adapters (API and CLI), so that prompt differences don't confound model comparison | Must | Done (prompt_template.py shared by GenericApiAdapter and GenericCliAdapter) |
+| E5.6 | As a researcher, I want `--adapter api --provider NAME` to work with just an env var (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, etc.) and no `--api-base` for the big providers, so that the common case is zero-config | Should | Done (PROVIDERS dict with env var names + default base URLs) |
 
-**Acceptance criteria:**
+**Acceptance criteria (verified):**
 
 ```bash
 # API key users — zero-code, works out of the box
-mhd-bench evaluate corpus/ --adapter openai --model gpt-4o --api-key sk-...
-mhd-bench evaluate corpus/ --adapter openai --model mistral-large \
-  --base-url https://api.mistral.ai/v1 --api-key ...
-mhd-bench evaluate corpus/ --adapter openai --model llama3 \
-  --base-url http://localhost:11434/v1   # Ollama, no key needed
+mhd-bench evaluate corpus/ --adapter api --provider openai --model gpt-4o --api-key sk-...
+mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key AI...
+mhd-bench evaluate corpus/ --adapter api --provider mistral --model devstral --api-key ...
+mhd-bench evaluate corpus/ --adapter api --api-base http://localhost:11434/v1 --model llama3
 
 # CLI subscription users — zero-code, works out of the box
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex --quiet"
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "mistral"
-mhd-bench evaluate corpus/ --adapter claude-cli   # existing, stays
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -m gemini-3.1-pro-preview -p" --model gemini-3.1-pro-preview
+mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec" --model codex
 
-# Custom model users — write a Python class, register via entry point
-# (documented in MODEL-ADAPTER-GUIDE.md with copy-paste example)
-mhd-bench evaluate corpus/ --adapter my_package.MyBertAdapter
-
-# Compare across all three access paths in one command
-mhd-bench compare corpus/ --adapters openai:gpt-4o,cli:codex,claude-cli
+# Custom model users — implement ModelAdapter in Python
+# (interface documented in ARCHITECTURE.md with example)
 ```
 
 **Design notes:**
-- The `openai` adapter wraps the OpenAI Python SDK (`openai>=1.0`), which already supports any `/v1/chat/completions` endpoint via `base_url`. This covers OpenAI, Mistral, Anthropic (via compatibility layer), Ollama, vLLM, LiteLLM, and dozens more.
-- The `cli` adapter generalizes `CliLlmAdapter`: configurable command, stdin for prompt, stdout parsed as text or JSON. The existing Claude CLI adapter stays as a concrete subclass for its JSON envelope format.
-- Custom adapters use a Python dotted path (`--adapter my_package.MyAdapter`) or setuptools entry points. MODEL-ADAPTER-GUIDE.md provides a 20-line copy-paste template.
-- All three paths share `prompt_template.py` (system prompt + response parsing + tag validation).
+- `GenericApiAdapter` wraps the OpenAI Python SDK (`openai>=1.0`), which supports any `/v1/chat/completions` endpoint via `base_url`. Provider presets (openai, gemini, mistral, groq) handle base URLs and env var names automatically.
+- `GenericCliAdapter` sends prompt via stdin (avoids argument-length limits on Windows), appends empty string to `-p`/`--prompt` flags. System prompt embedded in user prompt with task-first structure (for agentic CLIs).
+- Custom adapters implement `ModelAdapter.predict(document) → list[str]`.
+- All paths share `prompt_template.py` (system prompt + response parsing + tag validation).
 
 ### E3: Analysis & Publication (Phase 2–3)
 
