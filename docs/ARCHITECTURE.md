@@ -281,7 +281,7 @@ Python ≥3.13 required.
 
 ## Tests
 
-77 tests in `tests/`:
+101 tests in `tests/`:
 - `test_rem_parser.py` (6) — fixture-based, covers simple + multi-mod + metadata
 - `test_tagset_mapper.py` (12) — all suffix patterns, unmappable, unknown tags
 - `test_metrics.py` (4) — perfect/partial accuracy, token counts, confusion shape
@@ -290,5 +290,8 @@ Python ≥3.13 required.
 - `test_generic_cli.py` (17) — GenericCliAdapter: predict, stdin prompt, retries, caching, chunking, CLI integration
 - `test_cli.py` (13) — CLI integration via CliRunner: parse, mapping, evaluate, compare, version
 - `test_report.py` (5) — print_report, save_json, JSON schema, directory creation
+- `test_comparator.py` (10) — align_document, align_corpus, error handling, progress callback
+- `test_subset.py` (8) — stratification, determinism, edge cases (n < genres, n > corpus)
+- `test_prompt_template.py` (7) — build_tagging_prompt, chunked prompts, numbering
 
 Fixture: `tests/fixtures/sample_cora.xml` (9 tokens: NA, VVFIN, APPR, DDART, NA, clitic APPR+DDART, $_, FM)

@@ -25,7 +25,7 @@ Parse ReM CORA-XML → map HiTS to MHDBDB → evaluate → report.
 |----|-----------|----------|--------|
 | E1.1 | As a researcher, I want to parse all ReM CORA-XML files into a structured format, so that I can access tokens with their POS tags programmatically | Must | Done |
 | E1.2 | As a researcher, I want every HiTS tag in the corpus mapped to an MHDBDB tag (or explicitly excluded), so that no tokens silently fall through | Must | Done (73/73 mapped) |
-| E1.3 | As a developer, I want a gold passthrough adapter that returns mapped ground truth, so that I can verify the pipeline produces 100% accuracy | Must | Done (not yet run on full corpus) |
+| E1.3 | As a developer, I want a gold passthrough adapter that returns mapped ground truth, so that I can verify the pipeline produces 100% accuracy | Must | Done (validated on full corpus: 100% accuracy, 2,122,630 tokens, 16 tags) |
 | E1.4 | As a researcher, I want per-tag P/R/F1 and confusion matrices, so that I can identify which tags a model struggles with | Must | Done |
 | E1.5 | As a researcher, I want a CLI that combines parse → map → evaluate → report, so that I can run the benchmark in one command | Must | Done |
 
@@ -117,7 +117,7 @@ Deeper analysis for the paper.
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (65 tests, coverage not measured) |
+| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (101 tests, coverage not measured) |
 | E4.2 | As a developer, I want JSON result output, so that results are machine-readable for downstream analysis | Must | Done |
 | E4.3 | As a researcher, I want the benchmark to handle the full ReM corpus (2.5M tokens) in under 5 minutes for the passthrough adapter | Should | Not benchmarked |
 | E4.4 | As a developer, I want a MODEL-ADAPTER-GUIDE.md, so that contributors can plug in new models without reading all the code | ~~Could~~ Must | Open → moved to E5.3 (upgraded to Must) |
