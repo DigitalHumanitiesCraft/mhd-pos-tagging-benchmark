@@ -6,9 +6,9 @@
 
 ## Team
 
-- **Michael** — TU Darmstadt, professor, medieval German studies
-- **Christian** — DHCraft OG, technical lead, builds the benchmark tooling
-- **Katharina** — University of Salzburg, MHDBDB project lead, computational linguistics, ReM expertise
+- **Michael** (`michaelscho`) — TU Darmstadt, professor, medieval German studies
+- **Christian** (`chsteiner`) — DHCraft OG, technical lead, builds the benchmark tooling
+- **Katharina** (`wachauer`) — University of Salzburg, MHDBDB project lead, computational linguistics, ReM expertise
 
 ## Sibling Project
 
@@ -44,7 +44,7 @@ mhd-bench evaluate corpus/ --adapter passthrough --subset 3
 mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
 mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key --subset 3
 
-# Compare
+# Compare (baselines or cached results)
 mhd-bench compare corpus/ --adapters passthrough,majority --subset 3
 ```
 
@@ -58,6 +58,7 @@ Adapters: `passthrough`, `majority`, `api` (any OpenAI-compatible API), `cli` (a
 - **Tagset mapping YAML** is the single source of truth for HiTS→MHDBDB conversion
 - **Technology-agnostic** — adapter interface must support any POS tagger, not just LLMs
 - **Docs separation:** `docs/` = promptotyping docs, `docs/guides/` = user-facing guides
+- **`.claude/` is gitignored** — user-local settings, not shared
 
 ## Documentation
 

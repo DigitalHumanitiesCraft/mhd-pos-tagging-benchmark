@@ -28,6 +28,9 @@ env/
 *.swp
 *.swo
 
+# Claude Code (user-local settings)
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

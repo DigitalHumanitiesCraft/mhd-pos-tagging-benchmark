@@ -266,34 +266,40 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 
 **Ziel:** Ein/e Forscher/in mit ReM-Zugang und einem LLM-Account (z.B. Gemini, ChatGPT) soll den Benchmark nutzen können, ohne Python-Interna zu verstehen.
 
-## 2026-03-18 — handoff
+## 2026-03-19 — Colleague review iteration 2 + cleanup
 
-**Summary:** Massive session: full code review (2 colleague iterations, 26 issues fixed), adapter consolidation (5 specific → 2 generic), first real smoke tests (Claude Opus 4.6 vs Gemini 2.5 Pro vs Gemini 3.1 Pro Preview), E5 (Universal Model Access) completed, user docs restructured (compact README, Getting Started guide, Troubleshooting, Model Adapter Guide).
+**Fixes from iteration 2:**
+- Double `from __future__ import annotations` in cache.py — removed
+- `compute_metrics` counted empty AlignmentResults in `documents_evaluated` — now filters: `sum(1 for r in results if r.pairs)`
+- Retry backoff capped: `min(2 ** attempt, 60)` in both generic_api.py and generic_cli.py (prevents 17-min wait at max_retries=10)
+- Subset mismatch communicated to user: CLI prints yellow note when `--subset N` returns fewer than N documents
+- `gold_passthrough.py`: added `# type: ignore[misc]` for mypy (mappable_tokens guarantees non-None)
+- `majority_class.py`: added docstring note about cheating baseline for paper reviewers
 
-**Phase:** Implementation (Phase 2 in progress). 13 docs, all current:
-- Knowledge: MHDBDB-TAGSET, HITS-TAGSET, CORA-XML-FORMAT, OVERLAP-TABLE
-- Architecture: ARCHITECTURE.md (updated: 2 generic adapters, 101 tests)
-- Requirements: REQUIREMENTS.md (E1 done, E2 mostly done, E5 done, E3 open)
-- Research: RESEARCH.md (citations unverified)
-- Mapping: TAGSET-MAPPING.md + hits_to_mhdbdb.yaml v0.2.0
-- Guides: GETTING-STARTED.md, TROUBLESHOOTING.md, MODEL-ADAPTER-GUIDE.md
-- Process: JOURNAL.md
+**Also done:**
+- GitHub contributors invited: `michaelscho` (Michael) + `wachauer` (Katharina) — both write access
+- `.claude/` added to .gitignore (user-local settings)
+- CLAUDE.md updated: GitHub usernames, .claude gitignore note, 101 tests
+
+## 2026-03-19 — handoff
+
+**Summary:** Third review iteration from colleague — 6 issues fixed (duplicate import, documents_evaluated count, backoff cap, subset UX, type safety, baseline disclaimer). GitHub contributors invited. CLAUDE.md updated to current state. .claude/ gitignored.
+
+**Phase:** Implementation (Phase 2 in progress). 101 tests, all passing. 13 docs, all current.
 
 **Open issues:**
 - E2.3: No open-source/encoder model evaluated yet — paper needs min. 3 model categories
-- `compare` command can't compare two different LLMs in one call (global --cli-cmd/--model) — documented limitation
+- `compare` command can't compare two different LLMs in one call — documented limitation, user does separate evaluate runs
 - RESEARCH.md citations from web search, not verified against original papers
 - Prompt-Bias: system prompt contains MHG-specific hints that could confound model comparison
 - CLI-Adapter Temperature nicht kontrollierbar → Non-Determinismus im Paper diskutieren
-- GitHub contributors (michaelscho, wachauer) still not invited
-- 12 commits ahead of origin — not pushed
+- UX for non-programmers: see TODO 2026-03-19 above (web UI? Colab? wizard?)
 
 **Next steps:**
-1. UX exploration: how to make benchmark usable for linguists without programming skills (see TODO 2026-03-19)
-2. E2.3: evaluate one open-source model (e.g. Llama 3 via ollama — infrastructure is ready)
-3. Larger benchmark run: `--subset 10` or more with Claude + Gemini for statistically meaningful results
-4. Verify RESEARCH.md citations against original papers before paper writing
-5. Push to origin: `git push`
-6. Invite GitHub contributors: michaelscho, wachauer
+1. UX exploration for linguists without programming skills (2026-03-19 TODO)
+2. E2.3: evaluate one open-source model (e.g. Llama 3 via ollama — infrastructure ready)
+3. Larger benchmark run: `--subset 10`+ with Claude + Gemini for statistical significance
+4. Verify RESEARCH.md citations against original papers
+5. Push to origin
 
-**Git:** 12 commits on main, last `3ad336f`, 12 ahead of origin.
+**Git:** main branch, ahead of origin — push pending.
