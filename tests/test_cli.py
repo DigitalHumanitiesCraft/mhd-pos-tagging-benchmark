@@ -49,11 +49,13 @@ def test_mapping_validate():
     assert "All HiTS tags" in result.output
 
 
-def test_mapping_validate_requires_corpus_dir():
+def test_mapping_validate_without_corpus_dir(tmp_path, monkeypatch):
+    """Without --corpus-dir and no auto-detectable corpus, gives clear error."""
+    monkeypatch.chdir(tmp_path)  # empty dir, no corpus to find
     runner = CliRunner()
     result = runner.invoke(cli, ["mapping", "--validate"])
     assert result.exit_code != 0
-    assert "requires --corpus-dir" in result.output
+    assert "Corpus directory not found" in result.output
 
 
 def test_evaluate_passthrough():

@@ -14,6 +14,28 @@ console = Console()
 ADAPTER_CHOICES = ["passthrough", "majority", "api", "cli"]
 
 
+def _resolve_corpus_dir(corpus_dir: Path | None) -> Path:
+    """Resolve corpus directory: use explicit path or auto-detect."""
+    if corpus_dir is not None:
+        if not corpus_dir.exists():
+            raise click.UsageError(f"Corpus directory not found: {corpus_dir}")
+        return corpus_dir
+
+    from mhd_pos_benchmark.doctor import find_corpus_dir
+
+    found = find_corpus_dir()
+    if found is not None:
+        console.print(f"Auto-detected corpus: [bold]{found}[/bold]")
+        return found
+
+    raise click.UsageError(
+        "Corpus directory not found. Either:\n"
+        "  1. Pass it explicitly: mhd-bench evaluate /path/to/cora-xml/\n"
+        "  2. Download from: https://www.linguistics.rub.de/rem/access/index.html\n"
+        "     Extract so that ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/*.xml exists"
+    )
+
+
 def _parse_and_map(corpus_dir: Path, subset: int | None = None):
     """Shared helper: parse corpus, map tags, optionally select subset."""
     from mhd_pos_benchmark.data.rem_parser import parse_corpus
@@ -90,19 +112,31 @@ def _make_adapter(
         return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model)
     else:
         suggestions = {
-            "gemini": "Use '--adapter api --provider gemini' for Gemini API, or '--adapter cli --cli-cmd \"gemini -p\"' for Gemini CLI.",
-            "openai": "Use '--adapter api --provider openai' for OpenAI API.",
-            "gpt": "Use '--adapter api --provider openai' for OpenAI API.",
-            "mistral": "Use '--adapter api --provider mistral' for Mistral API.",
-            "groq": "Use '--adapter api --provider groq' for Groq API.",
-            "claude": "Use '--adapter cli --cli-cmd \"claude -p\"' for Claude CLI.",
-            "codex": "Use '--adapter cli --cli-cmd \"codex exec\"' for Codex CLI.",
-            "copilot": "Use '--adapter cli --cli-cmd \"copilot -p -s\"' for Copilot CLI.",
+            # Provider names
+            "gemini": "--adapter api --provider gemini  (API) or  --adapter cli --cli-cmd \"gemini -p\"  (CLI)",
+            "openai": "--adapter api --provider openai",
+            "mistral": "--adapter api --provider mistral",
+            "groq": "--adapter api --provider groq",
+            # CLI tool names
+            "claude": "--adapter cli --cli-cmd \"claude -p --model opus\"",
+            "codex": "--adapter cli --cli-cmd \"codex exec\"",
+            "copilot": "--adapter cli --cli-cmd \"copilot -p -s\"",
+            # Model names users might try as adapter names
+            "gpt-4o": "--adapter api --provider openai --model gpt-4o",
+            "gpt-4": "--adapter api --provider openai --model gpt-4",
+            "gpt": "--adapter api --provider openai",
+            "opus": "--adapter cli --cli-cmd \"claude -p --model opus\"",
+            "sonnet": "--adapter cli --cli-cmd \"claude -p --model sonnet\"",
+            "claude-opus": "--adapter cli --cli-cmd \"claude -p --model opus\"",
+            "gemini-2.5-pro": "--adapter api --provider gemini --model gemini-2.5-pro",
+            "gemini-2.5-flash": "--adapter api --provider gemini --model gemini-2.5-flash",
+            "llama": "--adapter api --api-base http://localhost:11434/v1 --model llama3",
         }
         hint = suggestions.get(name.lower(), "")
         msg = f"Unknown adapter: {name}. Valid adapters: {', '.join(ADAPTER_CHOICES)}."
         if hint:
-            msg += f"\n  Hint: {hint}"
+            msg += f"\n  Did you mean: {hint}"
+        msg += "\n  Run 'mhd-bench doctor' to see available tools."
         raise click.UsageError(msg)
 
 
@@ -113,12 +147,13 @@ def cli() -> None:
 
 
 @cli.command()
-@click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
+@click.argument("corpus_dir", type=click.Path(path_type=Path), default=None, required=False)
 @click.option("--stats", is_flag=True, help="Show corpus statistics")
-def parse(corpus_dir: Path, stats: bool) -> None:
+def parse(corpus_dir: Path | None, stats: bool) -> None:
     """Parse ReM CORA-XML files and optionally show statistics."""
     from mhd_pos_benchmark.data.rem_parser import parse_corpus
 
+    corpus_dir = _resolve_corpus_dir(corpus_dir)
     documents = parse_corpus(corpus_dir)
     console.print(f"Parsed {len(documents)} documents")
 
@@ -166,11 +201,9 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     mapper = TagsetMapper()
 
     if validate:
-        if corpus_dir is None:
-            raise click.UsageError("--validate requires --corpus-dir")
-
         from mhd_pos_benchmark.data.rem_parser import parse_corpus
 
+        corpus_dir = _resolve_corpus_dir(corpus_dir)
         documents = parse_corpus(corpus_dir)
         unmapped = mapper.find_unmapped(documents)
 
@@ -191,7 +224,7 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
 
 
 @cli.command()
-@click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
+@click.argument("corpus_dir", type=click.Path(path_type=Path), default=None, required=False)
 @click.option(
     "--adapter",
     type=click.Choice(ADAPTER_CHOICES),
@@ -250,7 +283,7 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     help="Custom API base URL (e.g. 'http://localhost:11434/v1' for ollama).",
 )
 def evaluate(
-    corpus_dir: Path,
+    corpus_dir: Path | None,
     adapter: str,
     subset: int | None,
     output: Path | None,
@@ -272,6 +305,7 @@ def evaluate(
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    corpus_dir = _resolve_corpus_dir(corpus_dir)
     api_key = _resolve_api_key(api_key)
     documents = _parse_and_map(corpus_dir, subset)
     model = _make_adapter(
@@ -297,7 +331,7 @@ def evaluate(
 
 
 @cli.command()
-@click.argument("corpus_dir", type=click.Path(exists=True, path_type=Path))
+@click.argument("corpus_dir", type=click.Path(path_type=Path), default=None, required=False)
 @click.option(
     "--adapters",
     type=str,
@@ -362,7 +396,7 @@ def evaluate(
     help="Custom API base URL.",
 )
 def compare(
-    corpus_dir: Path,
+    corpus_dir: Path | None,
     adapters: str | None,
     models: str | None,
     subset: int | None,
@@ -403,6 +437,7 @@ def compare(
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
 
+    corpus_dir = _resolve_corpus_dir(corpus_dir)
     api_key = _resolve_api_key(api_key)
     documents = _parse_and_map(corpus_dir, subset)
 
@@ -495,3 +530,59 @@ def compare(
         with open(output, "w", encoding="utf-8") as f:
             json.dump(comparison, f, indent=2, ensure_ascii=False)
         console.print(f"\nComparison saved to {output}")
+
+
+@cli.command()
+def doctor() -> None:
+    """Check prerequisites, detect available tools, suggest next steps."""
+    from mhd_pos_benchmark.doctor import (
+        check_api_keys,
+        check_cache_status,
+        check_cli_tools,
+        check_corpus,
+        check_openai_sdk,
+        check_python_version,
+        suggest_commands,
+    )
+
+    console.print("\n[bold]MHD POS Tagging Benchmark — System Check[/bold]\n")
+
+    # Core checks
+    for check in [check_python_version(), check_corpus(), check_openai_sdk()]:
+        icon = {"ok": "[green]OK[/green]", "warn": "[yellow]WARN[/yellow]", "fail": "[red]FAIL[/red]"}[check.status]
+        console.print(f"  {icon:>16s}  {check.name}: {check.message}")
+        if check.fix_hint:
+            for line in check.fix_hint.splitlines():
+                console.print(f"           {line}")
+
+    # CLI tools (compact)
+    cli_results = check_cli_tools()
+    cli_line = "  CLI Tools:  " + "  ".join(
+        f"{r.name} [green]\u2713[/green]" if r.status == "ok" else f"{r.name} [dim]\u2717[/dim]"
+        for r in cli_results
+    )
+    console.print(f"\n{cli_line}")
+
+    # API keys (compact)
+    api_results = check_api_keys()
+    api_line = "  API Keys:   " + "  ".join(
+        f"{r.name} [green]\u2713[/green]" if r.status == "ok" else f"{r.name} [dim]\u2717[/dim]"
+        for r in api_results
+    )
+    console.print(api_line)
+
+    # Cache status
+    cache_results = check_cache_status()
+    if cache_results:
+        cache_line = "  Cache:      " + ", ".join(f"{r.name} ({r.message})" for r in cache_results)
+        console.print(f"\n{cache_line}")
+
+    # Suggestions
+    corpus_ok = check_corpus().status == "ok"
+    suggestions = suggest_commands(cli_results, api_results, cache_results, corpus_ok)
+    if suggestions:
+        console.print("\n  [bold]Suggested next steps:[/bold]\n")
+        for suggestion in suggestions:
+            for line in suggestion.splitlines():
+                console.print(f"    {line}")
+            console.print()

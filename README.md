@@ -2,7 +2,7 @@
 
 Model-agnostic benchmark for Part-of-Speech tagging of Middle High German texts against [ReM](https://www.linguistics.rub.de/rem/) ground truth. Evaluates any POS tagger (LLM, encoder, classical) via a pluggable adapter interface.
 
-**New here?** Start with the [Getting Started guide](docs/guides/GETTING-STARTED.md).
+**New here?** Start with `mhd-bench doctor` — it checks your setup and tells you exactly what to do next.
 
 ## Quick Start
 
@@ -10,58 +10,50 @@ Model-agnostic benchmark for Part-of-Speech tagging of Middle High German texts 
 pip install -e ".[dev]"
 
 # Download ReM corpus (106 MB) from https://www.linguistics.rub.de/rem/access/index.html
-# Extract so that ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/*.xml exists
+# Extract into repo root (corpus is auto-detected)
 
-# Sanity check: gold passthrough = 100% accuracy
-mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
-  --adapter passthrough --subset 3
+mhd-bench doctor                                     # check setup, get suggestions
+mhd-bench evaluate --adapter passthrough --subset 3   # sanity check (100% accuracy)
 ```
 
 ## Evaluate a Model
 
 ```bash
 # Via CLI tool (Claude, Gemini CLI, Codex, Copilot, ...)
-mhd-bench evaluate corpus/ --adapter cli \
+mhd-bench evaluate --adapter cli \
   --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
 
 # Via API (OpenAI, Gemini, Mistral, Groq, Ollama, ...)
-mhd-bench evaluate corpus/ --adapter api \
+mhd-bench evaluate --adapter api \
   --provider gemini --model gemini-2.5-pro --api-key --subset 3
 
 # Via custom adapter (BERT, CRF, HMM, ...)
 # See docs/guides/MODEL-ADAPTER-GUIDE.md
 ```
 
-Results are cached in `results/<model>/predictions.jsonl` and reused on re-runs.
+Results are cached in `results/<model>/predictions.jsonl` and reused automatically.
 
 ## Compare Models
 
 ```bash
-# Step 1: Evaluate each model (results cached automatically)
-mhd-bench evaluate corpus/ --adapter cli \
-  --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
+# Compare cached results from previous evaluate runs — instant, no API calls
+mhd-bench compare --models claude-opus-4.6,gemini-2.5-pro --subset 3
 
-mhd-bench evaluate corpus/ --adapter cli \
-  --cli-cmd "gemini -m gemini-2.5-pro -p" --model gemini-2.5-pro --subset 3
-
-# Step 2: Compare from cache — instant, no API calls
-mhd-bench compare corpus/ --models claude-opus-4.6,gemini-2.5-pro --subset 3
-
-# Also works: compare baselines live
-mhd-bench compare corpus/ --adapters passthrough,majority --subset 3
-
-# Mix cached + live
-mhd-bench compare corpus/ --models claude-opus-4.6 --adapters majority --subset 3
+# Compare baselines live
+mhd-bench compare --adapters passthrough,majority --subset 3
 ```
 
 ## CLI Reference
 
 ```bash
-mhd-bench parse <corpus_dir> [--stats]
-mhd-bench mapping [--validate --corpus-dir <dir>]
-mhd-bench evaluate <corpus_dir> --adapter NAME [OPTIONS]
-mhd-bench compare <corpus_dir> --models a,b [--adapters c,d] [OPTIONS]
+mhd-bench doctor                                       # check setup, suggest commands
+mhd-bench parse [corpus_dir] [--stats]                 # parse corpus (auto-detected)
+mhd-bench mapping [--validate]                         # show/validate tagset mapping
+mhd-bench evaluate [corpus_dir] --adapter NAME [...]   # run evaluation
+mhd-bench compare [corpus_dir] --models a,b [...]      # compare cached results
 ```
+
+Corpus directory is auto-detected if omitted.
 
 | Flag | Description |
 |------|-------------|
