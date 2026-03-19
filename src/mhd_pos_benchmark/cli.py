@@ -301,8 +301,14 @@ def evaluate(
 @click.option(
     "--adapters",
     type=str,
-    required=True,
-    help="Comma-separated adapter names to compare (e.g. 'majority,gemini')",
+    default=None,
+    help="Comma-separated adapter names to run live (e.g. 'passthrough,majority').",
+)
+@click.option(
+    "--models",
+    type=str,
+    default=None,
+    help="Comma-separated model names to compare from cache (e.g. 'claude-opus-4.6,gemini-2.5-pro').",
 )
 @click.option(
     "--subset",
@@ -357,7 +363,8 @@ def evaluate(
 )
 def compare(
     corpus_dir: Path,
-    adapters: str,
+    adapters: str | None,
+    models: str | None,
     subset: int | None,
     output: Path | None,
     api_key: str | None,
@@ -368,12 +375,19 @@ def compare(
     provider: str | None,
     api_base: str | None,
 ) -> None:
-    """Compare multiple adapters side-by-side.
+    """Compare multiple models side-by-side.
 
-    Works best with baselines (passthrough, majority) or cached results
-    from separate evaluate runs. Running multiple API/CLI adapters in one
-    compare call is possible but slower — consider running evaluate for each
-    adapter first, then comparing the cached results.
+    Two modes:
+
+    \b
+    1. --models: Compare cached results from previous evaluate runs (recommended).
+       mhd-bench compare corpus/ --models claude-opus-4.6,gemini-2.5-pro
+
+    \b
+    2. --adapters: Run adapters live and compare (for baselines or single-config adapters).
+       mhd-bench compare corpus/ --adapters passthrough,majority
+
+    Both flags can be combined to mix cached and live results.
     """
     import json
 
@@ -383,30 +397,58 @@ def compare(
     from mhd_pos_benchmark.evaluation.metrics import EvaluationResult, compute_metrics
     from mhd_pos_benchmark.evaluation.report import print_report
 
+    if not adapters and not models:
+        raise click.UsageError("Provide --adapters, --models, or both.")
+
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
 
-    adapter_names = [a.strip() for a in adapters.split(",")]
     api_key = _resolve_api_key(api_key)
     documents = _parse_and_map(corpus_dir, subset)
 
     results: list[EvaluationResult] = []
-    for name in adapter_names:
-        model = _make_adapter(
-            name, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
-            provider=provider, api_base=api_base,
-        )
-        console.print(f"\nRunning: [bold]{model.name}[/bold]...")
-        with Progress(console=console) as progress:
-            task = progress.add_task(f"Evaluating {model.name}", total=len(documents))
-            alignments = align_corpus(
-                documents, model,
-                continue_on_error=continue_on_error,
-                progress_callback=lambda: progress.advance(task),
+
+    # 1. Cached models (from previous evaluate runs)
+    if models:
+        from mhd_pos_benchmark.adapters.cached import CachedAdapter
+
+        model_names = [m.strip() for m in models.split(",")]
+        for mname in model_names:
+            try:
+                cached_adapter = CachedAdapter(mname)
+            except FileNotFoundError as e:
+                raise click.UsageError(str(e)) from e
+            console.print(f"\nLoading cached results: [bold]{mname}[/bold]...")
+            with Progress(console=console) as progress:
+                task = progress.add_task(f"Loading {mname}", total=len(documents))
+                alignments = align_corpus(
+                    documents, cached_adapter,
+                    continue_on_error=continue_on_error,
+                    progress_callback=lambda: progress.advance(task),
+                )
+            result = compute_metrics(alignments, mname)
+            results.append(result)
+            print_report(result, console)
+
+    # 2. Live adapters (baselines or single-config)
+    if adapters:
+        adapter_names = [a.strip() for a in adapters.split(",")]
+        for name in adapter_names:
+            model = _make_adapter(
+                name, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
+                provider=provider, api_base=api_base,
             )
-        result = compute_metrics(alignments, model.name)
-        results.append(result)
-        print_report(result, console)
+            console.print(f"\nRunning: [bold]{model.name}[/bold]...")
+            with Progress(console=console) as progress:
+                task = progress.add_task(f"Evaluating {model.name}", total=len(documents))
+                alignments = align_corpus(
+                    documents, model,
+                    continue_on_error=continue_on_error,
+                    progress_callback=lambda: progress.advance(task),
+                )
+            result = compute_metrics(alignments, model.name)
+            results.append(result)
+            print_report(result, console)
 
     # Side-by-side summary
     console.print("\n[bold]Comparison Summary[/bold]\n")

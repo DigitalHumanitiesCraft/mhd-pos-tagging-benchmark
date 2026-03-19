@@ -37,10 +37,22 @@ Results are cached in `results/<model>/predictions.jsonl` and reused on re-runs.
 ## Compare Models
 
 ```bash
-mhd-bench compare corpus/ --adapters passthrough,majority --subset 3
-```
+# Step 1: Evaluate each model (results cached automatically)
+mhd-bench evaluate corpus/ --adapter cli \
+  --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
 
-For comparing different LLMs: run `evaluate` for each model separately (each needs its own `--cli-cmd` / `--provider`), then compare the cached results. See the [Getting Started guide](docs/guides/GETTING-STARTED.md#next-steps) for the full workflow.
+mhd-bench evaluate corpus/ --adapter cli \
+  --cli-cmd "gemini -m gemini-2.5-pro -p" --model gemini-2.5-pro --subset 3
+
+# Step 2: Compare from cache — instant, no API calls
+mhd-bench compare corpus/ --models claude-opus-4.6,gemini-2.5-pro --subset 3
+
+# Also works: compare baselines live
+mhd-bench compare corpus/ --adapters passthrough,majority --subset 3
+
+# Mix cached + live
+mhd-bench compare corpus/ --models claude-opus-4.6 --adapters majority --subset 3
+```
 
 ## CLI Reference
 
@@ -48,12 +60,13 @@ For comparing different LLMs: run `evaluate` for each model separately (each nee
 mhd-bench parse <corpus_dir> [--stats]
 mhd-bench mapping [--validate --corpus-dir <dir>]
 mhd-bench evaluate <corpus_dir> --adapter NAME [OPTIONS]
-mhd-bench compare <corpus_dir> --adapters a,b [OPTIONS]
+mhd-bench compare <corpus_dir> --models a,b [--adapters c,d] [OPTIONS]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--adapter` | `passthrough`, `majority`, `api`, `cli` |
+| `--models A,B` | Compare cached results from previous evaluate runs |
 | `--subset N` | Evaluate on N representative documents |
 | `--model NAME` | Model name for display and caching |
 | `--cli-cmd CMD` | CLI command (for `--adapter cli`) |
