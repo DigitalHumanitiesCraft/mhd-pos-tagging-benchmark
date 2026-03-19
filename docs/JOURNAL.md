@@ -303,3 +303,40 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 5. Push to origin
 
 **Git:** main branch, ahead of origin — push pending.
+
+## 2026-03-19 — UX improvements + compare --models + handoff
+
+**Done this session (continued):**
+- `compare --models`: CachedAdapter loads predictions from previous evaluate runs. Users can now compare any two models without re-running them. Fixes the core `compare` limitation.
+- `mhd-bench doctor`: diagnostic command with auto-detection of Python, corpus, CLI tools, API keys, cache. Generates max 3 copy-paste command suggestions (1 CLI, 1 API, 1 compare).
+- Corpus auto-detection: `corpus_dir` optional in all commands. Searches `./corpus/`, `./ReM-v2.1_coraxml/.../cora-xml/`, etc. No more typing the nested path.
+- Better error messages: `--adapter gemini` → "Did you mean --adapter api --provider gemini?". Model names as adapter names get "Did you mean" hints. All errors point to `mhd-bench doctor`.
+- README simplified: Quick Start uses `doctor`, commands drop corpus path.
+
+**Decisions:**
+- No interactive wizard (`quickstart`). `doctor` with command suggestions achieves the same UX without composability/testing/maintenance overhead. Christian's feedback: "quickstart is overengineered — doctor with --suggest does the same thing."
+- `suggest_commands()` priority: max 1 CLI (flat-rate, cheapest) + max 1 API (fastest) + 1 compare (if cached). Avoids noise when many tools are available.
+- Presets deferred — `doctor` suggestions serve the same purpose without new infrastructure.
+
+## 2026-03-19 18:45 — handoff
+
+**Summary:** Fixed `compare` command limitation (new `--models` flag for cached results), built `mhd-bench doctor` with smart suggestions, added corpus auto-detection to all commands, improved error messages with "Did you mean" hints. 130 tests, all pushed.
+
+**Phase:** Implementation (Phase 2 in progress). 130 tests, 14 docs, all current.
+
+**Open issues:**
+- E2.3: No open-source/encoder model evaluated yet — paper needs min. 3 model categories
+- RESEARCH.md citations from web search, not verified against original papers
+- Prompt-Bias: system prompt contains MHG-specific hints that could confound model comparison
+- CLI-Adapter Temperature nicht kontrollierbar → Non-Determinismus im Paper diskutieren
+- GETTING-STARTED.md not yet updated with `doctor` recommendation (README done)
+- ARCHITECTURE.md not yet updated with doctor.py, cached.py modules
+
+**Next steps:**
+1. Update GETTING-STARTED.md to recommend `mhd-bench doctor` as first step
+2. Update ARCHITECTURE.md with new modules (doctor.py, cached.py) and 130 test count
+3. E2.3: evaluate Llama 3 via ollama (infrastructure ready: `--adapter api --api-base http://localhost:11434/v1`)
+4. Larger benchmark run: `--subset 10`+ for statistically meaningful results
+5. Verify RESEARCH.md citations against original papers
+
+**Git:** `cd8d497` on main, pushed to origin.
