@@ -71,11 +71,11 @@ Three access paths:
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
 | E5.1 | As a researcher with an API key (OpenAI, Mistral, Gemini, Groq, or any OpenAI-compatible endpoint), I want to benchmark my model with `--adapter api --provider NAME --model MODEL --api-key KEY`, so that I don't need to write code or understand the adapter interface | Must | Done (GenericApiAdapter, openai SDK, provider presets for openai/gemini/mistral/groq) |
-| E5.2 | As a researcher with a CLI subscription (Claude, Gemini, Codex, Copilot, Vibe, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --cli-cmd CMD`, so that I can use any CLI-based LLM without writing an adapter | Must | Done (GenericCliAdapter, prompt via stdin, Windows path resolution, smoke-tested with Claude + Gemini) |
+| E5.2 | As a researcher with a CLI subscription (Claude, Gemini, Codex, Copilot, Vibe, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --preset NAME --model MODEL`, so that I can use any CLI-based LLM without writing an adapter | Must | Done (GenericCliAdapter with presets: claude, gemini, codex, copilot + `--cli-cmd` fallback for unknown CLIs) |
 | E5.3 | As a developer with a custom model (fine-tuned BERT, CRF, HMM, or any model with Python bindings), I want a documented adapter interface with a working example, so that I can write a `ModelAdapter` subclass and plug it in without reading the full codebase | Must | Done (MODEL-ADAPTER-GUIDE.md with 3 examples: dictionary, BERT, CRF + runner script + checklist) |
 | E5.4 | As a researcher, I want `--api-base` support for the API adapter, so that I can point it at Ollama (`localhost:11434`), vLLM, LiteLLM, or any self-hosted endpoint | Should | Done (--api-base flag, auto-detects local endpoints and skips API key requirement) |
-| E5.5 | As a researcher, I want the shared MHG system prompt and response parsing used by all LLM adapters (API and CLI), so that prompt differences don't confound model comparison | Must | Done (prompt_template.py shared by GenericApiAdapter and GenericCliAdapter) |
-| E5.6 | As a researcher, I want `--adapter api --provider NAME` to work with just an env var (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, etc.) and no `--api-base` for the big providers, so that the common case is zero-config | Should | Done (PROVIDERS dict with env var names + default base URLs) |
+| E5.5 | As a researcher, I want the shared MHG system prompt and response parsing used by all LLM adapters (API and CLI), so that prompt differences don't confound model comparison | Must | Done (prompt_template.py shared by all LLM adapters — API and CLI presets) |
+| E5.6 | As a researcher, I want `--adapter api --provider NAME` to work with just an env var (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, etc.) and no `--api-base` for the big providers, so that the common case is zero-config | Should | Done (provider presets in GenericApiAdapter with env var names + default base URLs) |
 
 **Acceptance criteria (verified):**
 
@@ -100,6 +100,7 @@ mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec" --model codex
 - `GenericCliAdapter` sends prompt via stdin (avoids argument-length limits on Windows), appends empty string to `-p`/`--prompt` flags. System prompt embedded in user prompt with task-first structure (for agentic CLIs).
 - Custom adapters implement `ModelAdapter.predict(document) → list[str]`.
 - All paths share `prompt_template.py` (system prompt + response parsing + tag validation).
+- CLI presets know per-tool specifics: system prompt delivery (flag vs embed), prompt delivery (stdin vs argument), response format (raw vs JSON key), extra flags. Users can override or extend presets via `cli-profiles.yaml` (same schema as built-ins).
 
 ### E3: Analysis & Publication (Phase 2–3)
 
@@ -117,7 +118,7 @@ Deeper analysis for the paper.
 
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
-| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (101 tests, coverage not measured) |
+| E4.1 | As a developer, I want `pytest` with >90% coverage on core modules, so that refactoring is safe | Should | Partial (130 tests, coverage not measured) |
 | E4.2 | As a developer, I want JSON result output, so that results are machine-readable for downstream analysis | Must | Done |
 | E4.3 | As a researcher, I want the benchmark to handle the full ReM corpus (2.5M tokens) in under 5 minutes for the passthrough adapter | Should | Not benchmarked |
 | E4.4 | As a developer, I want a MODEL-ADAPTER-GUIDE.md, so that contributors can plug in new models without reading all the code | ~~Could~~ Must | Open → moved to E5.3 (upgraded to Must) |

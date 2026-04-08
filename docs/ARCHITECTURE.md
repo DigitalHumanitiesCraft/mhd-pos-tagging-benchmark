@@ -176,6 +176,8 @@ src/mhd_pos_benchmark/
 │   ├── majority_class.py    # Most-frequent-tag baseline (18.4%)
 │   ├── generic_api.py       # Any OpenAI-compatible API (OpenAI, Gemini, Mistral, Groq, local)
 │   ├── generic_cli.py       # Any CLI tool (claude, gemini, codex, copilot, vibe, ...)
+│   ├── cli_presets.py       # Built-in CLI presets (claude, gemini, codex, copilot) + cli-profiles.yaml loader
+│   ├── cached.py            # CachedAdapter: load predictions from previous evaluate runs
 │   ├── prompt_template.py   # Shared prompt + response parsing for all LLMs
 │   └── cache.py             # JSONL result cache with config hash
 └── evaluation/
@@ -204,7 +206,11 @@ ModelAdapter (ABC)
 ├── GoldPassthroughAdapter          # Pipeline validation (100%)
 ├── MajorityClassAdapter            # Baseline (most frequent tag)
 ├── GenericApiAdapter               # Any OpenAI-compatible API (openai SDK)
-└── GenericCliAdapter               # Any CLI tool (subprocess + stdin)
+│                                   #   Provider presets: openai, gemini, mistral, groq
+├── GenericCliAdapter               # Any CLI tool (subprocess + stdin)
+│                                   #   Presets: claude, gemini, codex, copilot
+│                                   #   User override: cli-profiles.yaml (optional, same schema)
+└── CachedAdapter                   # Load predictions from previous evaluate runs
 ```
 
 ### Generic API Adapter (`--adapter api`)
@@ -232,24 +238,20 @@ mhd-bench evaluate corpus/ --adapter api --api-base http://localhost:11434/v1 --
 ### Generic CLI Adapter (`--adapter cli`)
 
 For any CLI tool with a flat-rate subscription (no API key needed).
-Prompt sent via stdin; system prompt embedded in user prompt.
+Each preset knows per-tool specifics: system prompt delivery (flag vs embed), prompt delivery (stdin vs argument), response format (raw vs JSON key), extra flags.
 
 ```bash
-# Claude Code CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus"
+# Using presets (recommended)
+mhd-bench evaluate corpus/ --adapter cli --preset claude --model opus
+mhd-bench evaluate corpus/ --adapter cli --preset gemini --model gemini-2.5-flash
+mhd-bench evaluate corpus/ --adapter cli --preset codex --model codex
+mhd-bench evaluate corpus/ --adapter cli --preset copilot --model copilot
 
-# Gemini CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -m gemini-2.5-flash -p"
-
-# OpenAI Codex CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec"
-
-# GitHub Copilot CLI
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "copilot -p -s"
-
-# Mistral Vibe CLI
+# Escape hatch for unknown CLIs
 mhd-bench evaluate corpus/ --adapter cli --cli-cmd "vibe --prompt"
 ```
+
+Users can define custom CLI profiles in `cli-profiles.yaml` (same schema as built-in presets).
 
 ### Custom Adapters
 
@@ -281,7 +283,7 @@ Python ≥3.13 required.
 
 ## Tests
 
-101 tests in `tests/`:
+130 tests in `tests/`:
 - `test_rem_parser.py` (6) — fixture-based, covers simple + multi-mod + metadata
 - `test_tagset_mapper.py` (12) — all suffix patterns, unmappable, unknown tags
 - `test_metrics.py` (4) — perfect/partial accuracy, token counts, confusion shape

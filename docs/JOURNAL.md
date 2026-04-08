@@ -340,3 +340,24 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 5. Verify RESEARCH.md citations against original papers
 
 **Git:** `cd8d497` on main, pushed to origin.
+
+## 2026-03-19 — CLI presets + smoke test results
+
+**Done:**
+- CLI presets system: each CLI tool (claude, gemini, codex, copilot) has a preset that knows system prompt delivery (flag vs embed), prompt delivery (stdin vs argument), response format (raw vs json_key), extra flags
+- GenericCliAdapter rewritten to use presets — `--preset claude --model opus` replaces `--cli-cmd "claude -p --model opus"`
+- cli-profiles.yaml for user-defined CLI profiles (same schema, overrides built-ins)
+- --cli-cmd stays as escape hatch for unknown CLIs
+- Smoke tested: Claude preset 6/6 on M044 (system prompt via --system-prompt flag, JSON output, stdin delivery)
+- Gemini preset correctly configured (argument delivery, --yolo, raw output) but blocked by Google capacity during test — not a code issue
+- Large comparison run (subset 10): Gemini completed 8/10 docs (7531 tokens), Claude timed out due to rate limiting when run in parallel. Lesson: run models sequentially, not in parallel
+
+**Decisions:**
+- CLI presets over per-CLI adapter files. One GenericCliAdapter with preset config instead of separate ClaudeCliAdapter, GeminiCliAdapter, etc.
+- stdin delivery for Claude (supports it natively), argument delivery for Gemini (requires -p VALUE)
+- YAML profiles use same schema as built-in presets — no learning curve for users extending
+
+**Known issues from comparison run:**
+- Gemini 2.5 Pro occasionally returns wrong tag count (199 instead of 200) on large chunks — retries usually fix it
+- Claude CLI subprocess very slow when run in parallel with other Claude processes (rate limiting)
+- Both models struggle with M345 and M408 (12k+ tokens each, 60+ chunks) — needs investigation whether smaller chunk_size helps
