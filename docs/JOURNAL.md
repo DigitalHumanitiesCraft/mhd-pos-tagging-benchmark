@@ -361,3 +361,36 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 - Gemini 2.5 Pro occasionally returns wrong tag count (199 instead of 200) on large chunks — retries usually fix it
 - Claude CLI subprocess very slow when run in parallel with other Claude processes (rate limiting)
 - Both models struggle with M345 and M408 (12k+ tokens each, 60+ chunks) — needs investigation whether smaller chunk_size helps
+
+## 2026-03-19 — First benchmark result + handoff
+
+**Summary:** First real benchmark result: Gemini 3.1 Pro Preview scores 90.08% accuracy on 8 docs / 7,531 tokens (zero-shot, no MHG training). Claude Opus comparison blocked by rate limiting when run from Claude Code — must be run in separate terminal. CLI presets shipped, docs updated, MODEL-ADAPTER-GUIDE rewritten for non-programmers.
+
+**Phase:** Implementation (iteration). 130 tests, all passing. Docs current.
+
+**First result — Gemini 3.1 Pro Preview (8 docs, 7,531 tokens):**
+- Accuracy: 90.08%, Macro-F1: 86.04%
+- Strong: NOM (0.952), NAM (0.965), POS (0.964), VEM (0.958), CCNJ (0.957)
+- Weak: VEX (0.450 — recall only 29%, copula/auxiliary confusion), ADJ (0.790), INJ (0.667, n=5)
+- Cached in results/gemini-3.1-pro-preview/ (8 docs, reusable)
+
+**Critical discovery:** `claude -p` (CLI subprocess) cannot run from within Claude Code — they share the same account/rate limit. Benchmark runs with Claude must happen in a **separate terminal**. This is a fundamental constraint, not a bug.
+
+**Open issues:**
+- Claude Opus comparison still missing — run in separate terminal (commands below)
+- E2.3: no open-source/encoder model evaluated yet
+- VEX F1=0.450 is a known limitation (VA*→VEX overcount in HiTS mapping, affects all models equally)
+- Gemini capacity issues with 2.5 Pro intermittent — Flash works reliably
+- RESEARCH.md citations not verified against original papers
+
+**Next steps (for next session or separate terminal):**
+1. Run Claude comparison in separate terminal:
+   ```
+   python -m mhd_pos_benchmark.cli evaluate --adapter cli --preset claude --model opus --subset 3 --continue-on-error
+   python -m mhd_pos_benchmark.cli compare --models claude-opus-4.6,gemini-3.1-pro-preview --subset 3
+   ```
+2. E2.3: evaluate Llama 3 via ollama (`--adapter api --api-base http://localhost:11434/v1`)
+3. Investigate smaller chunk_size (100 instead of 200) for reliability on large docs
+4. Verify RESEARCH.md citations
+
+**Git:** `548392c` on main, pushed to origin.
