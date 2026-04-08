@@ -1,111 +1,224 @@
 # How to Add Your Own Model
 
-This guide shows how to plug any POS tagger into the benchmark — a fine-tuned BERT, a CRF, an HMM, a dictionary lookup, anything with Python bindings.
+You have a POS tagger — a fine-tuned BERT, a CRF, an HMM, a dictionary, or anything else that can assign POS tags to Middle High German words. This guide shows you how to plug it into the benchmark so you can compare it against other models.
 
-## The Contract
+## Do I Need This Guide?
 
-Implement one class with two things:
+**No, if** you want to use an existing LLM (Claude, Gemini, GPT, Mistral, etc.). For those, use the built-in adapters — no code required:
+
+```bash
+# LLM via CLI tool (Claude, Gemini CLI, Codex, etc.)
+mhd-bench evaluate --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6
+
+# LLM via API key (OpenAI, Gemini, Mistral, Groq, etc.)
+mhd-bench evaluate --adapter api --provider gemini --model gemini-2.5-pro --api-key
+```
+
+See [GETTING-STARTED.md](GETTING-STARTED.md) for details.
+
+**Yes, if** you have a custom model — something you trained, downloaded, or built yourself that runs as Python code. That's what this guide is for.
+
+## What You Need
+
+- Python 3.13+
+- The benchmark installed (`pip install -e "."`)
+- Your model accessible from Python (a local file, a Hugging Face model, a pickle, etc.)
+- Basic familiarity with Python (writing a function, running a script)
+
+## How It Works
+
+The benchmark has a simple contract: you write a Python class with one method called `predict()`. The benchmark calls this method once per document, passes you the words, and you return the POS tags. That's it — the benchmark handles parsing the corpus, computing accuracy, and generating the report.
+
+```
+Your model                         The benchmark
+────────────                       ─────────────
+                    Document
+              ◄──── (list of words)
+                    
+predict()
+figures out
+the POS tags
+                    
+              ────► list of tags     → accuracy, F1,
+                    (one per word)     confusion matrix,
+                                       comparison tables
+```
+
+## Step 1: Create Your Adapter File
+
+Create a new Python file anywhere on your computer. For this example, we'll call it `my_tagger.py` and put it in the repo root:
 
 ```python
+# my_tagger.py
+
 from mhd_pos_benchmark.adapters.base import ModelAdapter
 from mhd_pos_benchmark.data.corpus import Document
 
-class MyAdapter(ModelAdapter):
+
+class MyTagger(ModelAdapter):
+    """Replace this with a description of your model."""
+
     @property
     def name(self) -> str:
+        # A short name for your model — shows up in reports and filenames
         return "my-model-v1"
 
     def predict(self, document: Document) -> list[str]:
-        # Return one MHDBDB tag per mappable token, in order
-        ...
+        # This is where your model does its work.
+        # You receive a document and must return one POS tag per word.
+
+        tags = []
+        for token in document.mappable_tokens:
+            word = token.form_for_tagging  # e.g., "ritter", "der", "sprach"
+
+            # === YOUR MODEL LOGIC HERE ===
+            # Replace this with however your model assigns tags.
+            # For now, we just guess "NOM" for everything:
+            tag = "NOM"
+
+            tags.append(tag)
+
+        return tags
 ```
 
-That's it. The benchmark handles everything else (parsing, mapping, metrics, reporting).
+**Key points:**
+- `document.mappable_tokens` gives you only the words that need tagging (punctuation, foreign text, and untagged items are already excluded)
+- `token.form_for_tagging` gives you the word form — use this, not `form_diplomatic` or `form_modernized` (it handles clitics correctly)
+- You must return **exactly** `len(document.mappable_tokens)` tags — no more, no fewer
 
-## What You Receive
+## Step 2: Use the Right Tags
 
-`predict()` gets a `Document` with these useful fields:
+Your model must return tags from this set of 16 — no other tags are accepted:
+
+| Tag | What it means | Examples |
+|-----|---------------|----------|
+| NOM | Noun | ritter, minne, zît |
+| NAM | Proper noun | Uolrîch, Wiene |
+| ADJ | Adjective | grôz, schoene |
+| ADV | Adverb | schone, vil, sêre |
+| DET | Determiner | der, diu, ein |
+| POS | Possessive | mîn, dîn, unser |
+| PRO | Pronoun | ich, er, wir |
+| PRP | Preposition | ûf, zuo, in |
+| NEG | Negation | niht, ne, en |
+| NUM | Numeral | zwô, drî |
+| SCNJ | Subordinating conj. | daz (clause), ob |
+| CCNJ | Coordinating conj. | und, oder, aber |
+| VRB | Full verb | liuhten, varn |
+| VEX | Auxiliary verb | hât (+ participle) |
+| VEM | Modal verb | müezen, suln |
+| INJ | Interjection | owê, jâ |
+
+If your model uses a different tagset (e.g., STTS, Universal POS), you need a mapping step — translate your model's tags to these 16 before returning them.
+
+## Step 3: Run the Benchmark
+
+Create a runner script next to your adapter file. This script loads the corpus, runs your model, and shows the results:
 
 ```python
-document.id                      # "M001" — unique document ID
-document.mappable_tokens         # list[Token] — only the tokens you need to tag
-document.tokens                  # list[Token] — all tokens (including excluded)
+# run_my_tagger.py
 
-# Each Token has:
-token.form_for_tagging           # "ritter" — the word form to tag
-token.form_diplomatic            # "ritter" — original written form
-token.form_modernized            # "ritter" — analyzed form (different for clitics)
-token.lemma                      # "rîter" — lemma (may be None)
-token.id                         # "t1_m1" — unique token ID
+from pathlib import Path
+from rich.console import Console
+
+from mhd_pos_benchmark.data.rem_parser import parse_corpus
+from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
+from mhd_pos_benchmark.data.subset import select_subset
+from mhd_pos_benchmark.evaluation.comparator import align_corpus
+from mhd_pos_benchmark.evaluation.metrics import compute_metrics
+from mhd_pos_benchmark.evaluation.report import print_report, save_json
+
+# Import YOUR adapter
+from my_tagger import MyTagger
+
+# --- Configuration (change these) ---
+CORPUS_DIR = Path("ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/")
+SUBSET_SIZE = 3   # Start small! Increase once it works.
+# -------------------------------------
+
+# Load and prepare corpus
+print("Loading corpus...")
+documents = parse_corpus(CORPUS_DIR)
+mapper = TagsetMapper()
+for doc in documents:
+    mapper.map_document(doc)
+documents = select_subset(documents, n=SUBSET_SIZE)
+print(f"Testing on {len(documents)} documents")
+
+# Run your model
+adapter = MyTagger()
+print(f"Running {adapter.name}...")
+alignments = align_corpus(documents, adapter, continue_on_error=True)
+result = compute_metrics(alignments, adapter.name)
+
+# Show results
+console = Console()
+print_report(result, console)
+
+# Save to JSON (optional)
+save_json(result, Path(f"results/{adapter.name}.json"))
+print(f"\nResults saved to results/{adapter.name}.json")
 ```
 
-## What You Return
+Run it:
 
-A `list[str]` of MHDBDB tags — exactly one per `document.mappable_tokens`, in the same order.
+```bash
+python run_my_tagger.py
+```
 
-The 16 valid tags:
+You should see a table with accuracy, per-tag precision/recall/F1, and token counts. Start with `SUBSET_SIZE = 3` (fast), then increase to `10` or remove the subset for the full corpus.
 
-| Tag | Category | Tag | Category |
-|-----|----------|-----|----------|
-| NOM | Noun | PRP | Preposition |
-| NAM | Proper noun | NEG | Negation |
-| ADJ | Adjective | NUM | Numeral |
-| ADV | Adverb | SCNJ | Subord. conjunction |
-| DET | Determiner | CCNJ | Coord. conjunction |
-| POS | Possessive | VRB | Full verb |
-| PRO | Pronoun | VEX | Auxiliary verb |
-| INJ | Interjection | VEM | Modal verb |
+## Complete Examples
 
-## Example: Dictionary Lookup
+### Dictionary Lookup (simplest possible)
 
-The simplest possible adapter — a hardcoded dictionary:
+A hardcoded word-to-tag dictionary. Useful as a sanity check or minimal baseline:
 
 ```python
-# my_adapters/dictionary.py
+# dictionary_tagger.py
 
 from mhd_pos_benchmark.adapters.base import ModelAdapter
 from mhd_pos_benchmark.data.corpus import Document
 
-# Minimal MHG word → tag dictionary
 LEXICON = {
     "der": "DET", "diu": "DET", "daz": "DET", "ein": "DET",
     "ich": "PRO", "du": "PRO", "er": "PRO", "wir": "PRO",
     "und": "CCNJ", "oder": "CCNJ",
-    "daz": "SCNJ",  # ambiguous! context would help
     "niht": "NEG", "ne": "NEG",
     "ist": "VEX", "was": "VEX", "hât": "VEX",
 }
 
-class DictionaryAdapter(ModelAdapter):
+class DictionaryTagger(ModelAdapter):
     @property
     def name(self) -> str:
         return "dictionary-lookup"
 
     def predict(self, document: Document) -> list[str]:
         return [
-            LEXICON.get(token.form_for_tagging.lower(), "NOM")  # default: NOM
+            LEXICON.get(token.form_for_tagging.lower(), "NOM")  # guess NOM if unknown
             for token in document.mappable_tokens
         ]
 ```
 
-## Example: Hugging Face Transformer
+### Hugging Face Transformer (BERT-style)
 
-A BERT-style token classifier fine-tuned on MHG POS:
+If you have a fine-tuned token classifier on Hugging Face:
 
 ```python
-# my_adapters/bert_tagger.py
+# bert_tagger.py
 
-from transformers import AutoTokenizer, AutoModelForTokenClassification
 import torch
+from transformers import AutoTokenizer, AutoModelForTokenClassification
 
 from mhd_pos_benchmark.adapters.base import ModelAdapter
 from mhd_pos_benchmark.data.corpus import Document
 
-# Map your model's label IDs to MHDBDB tags
-LABEL_MAP = {0: "NOM", 1: "VRB", 2: "ADJ", ...}  # from your training
+# Map your model's numeric label IDs to MHDBDB tags.
+# You defined these during training — check your label2id config.
+LABEL_MAP = {0: "NOM", 1: "VRB", 2: "ADJ", 3: "ADV", 4: "DET", ...}
 
-class BertMhdAdapter(ModelAdapter):
-    def __init__(self, model_path: str = "your-org/mhg-pos-bert"):
+class BertMhdTagger(ModelAdapter):
+    def __init__(self, model_path: str = "your-username/mhg-pos-bert"):
         self._tokenizer = AutoTokenizer.from_pretrained(model_path)
         self._model = AutoModelForTokenClassification.from_pretrained(model_path)
         self._model.eval()
@@ -115,31 +228,29 @@ class BertMhdAdapter(ModelAdapter):
         return "bert-mhg-pos"
 
     def predict(self, document: Document) -> list[str]:
-        forms = [t.form_for_tagging for t in document.mappable_tokens]
-        # Tokenize — one word at a time to maintain alignment
         tags = []
-        for form in forms:
-            inputs = self._tokenizer(form, return_tensors="pt")
+        for token in document.mappable_tokens:
+            inputs = self._tokenizer(token.form_for_tagging, return_tensors="pt")
             with torch.no_grad():
                 logits = self._model(**inputs).logits
-            # Take the prediction for the first subword token
-            label_id = logits[0, 1, :].argmax().item()  # skip [CLS]
+            # Prediction for the first real token (skip [CLS])
+            label_id = logits[0, 1, :].argmax().item()
             tags.append(LABEL_MAP.get(label_id, "NOM"))
         return tags
 ```
 
-## Example: CRF Tagger
+### CRF Tagger (classical)
 
-A classical CRF using hand-crafted features:
+A trained CRF model saved as a pickle file:
 
 ```python
-# my_adapters/crf_tagger.py
+# crf_tagger.py
 
 import pickle
 from mhd_pos_benchmark.adapters.base import ModelAdapter
 from mhd_pos_benchmark.data.corpus import Document
 
-class CrfAdapter(ModelAdapter):
+class CrfTagger(ModelAdapter):
     def __init__(self, model_path: str = "models/mhg_crf.pkl"):
         with open(model_path, "rb") as f:
             self._model = pickle.load(f)
@@ -149,7 +260,6 @@ class CrfAdapter(ModelAdapter):
         return "crf-mhg"
 
     def predict(self, document: Document) -> list[str]:
-        # Extract features per token
         features = [
             {
                 "word": t.form_for_tagging,
@@ -162,67 +272,20 @@ class CrfAdapter(ModelAdapter):
         return self._model.predict([features])[0]
 ```
 
-## Running Your Adapter
+## Before You Run on the Full Corpus
 
-Custom adapters aren't registered in the CLI (yet). Use a small Python script:
+- [ ] Test on 1 document first (`SUBSET_SIZE = 1`) — does it run without errors?
+- [ ] Check that the gold passthrough gives 100% accuracy (proves the pipeline works)
+- [ ] Verify your model returns only tags from the 16-tag set
+- [ ] Verify the tag count matches: `len(result) == len(document.mappable_tokens)`
+- [ ] Then increase: `SUBSET_SIZE = 10`, then remove the subset for all 406 documents
 
-```python
-#!/usr/bin/env python3
-"""Run the benchmark with a custom adapter."""
+## Troubleshooting
 
-from pathlib import Path
-from rich.console import Console
-
-from mhd_pos_benchmark.data.rem_parser import parse_corpus
-from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
-from mhd_pos_benchmark.evaluation.comparator import align_corpus
-from mhd_pos_benchmark.evaluation.metrics import compute_metrics
-from mhd_pos_benchmark.evaluation.report import print_report, save_json
-
-# 1. Import your adapter
-from my_adapters.bert_tagger import BertMhdAdapter
-
-# 2. Parse and map corpus
-corpus_dir = Path("ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/")
-documents = parse_corpus(corpus_dir)
-mapper = TagsetMapper()
-for doc in documents:
-    mapper.map_document(doc)
-
-# 3. Optional: use a subset for quick testing
-from mhd_pos_benchmark.data.subset import select_subset
-documents = select_subset(documents, n=10)
-
-# 4. Run evaluation
-adapter = BertMhdAdapter("your-org/mhg-pos-bert")
-alignments = align_corpus(documents, adapter, continue_on_error=True)
-result = compute_metrics(alignments, adapter.name)
-
-# 5. Print and save
-console = Console()
-print_report(result, console)
-save_json(result, Path(f"results/{adapter.name}.json"))
-```
-
-```bash
-pip install -e "."
-python run_my_model.py
-```
-
-## Checklist
-
-Before running on the full corpus:
-
-- [ ] `predict()` returns exactly `len(document.mappable_tokens)` tags
-- [ ] All returned tags are in the 16-tag set (NOM, NAM, ADJ, ADV, DET, POS, PRO, PRP, NEG, NUM, SCNJ, CCNJ, VRB, VEX, VEM, INJ)
-- [ ] Test on one small document first (`--subset 1` or `select_subset(docs, n=1)`)
-- [ ] Check that `gold-passthrough` gives 100% before trusting your model's results
-
-## Common Pitfalls
-
-| Problem | Solution |
-|---------|----------|
-| Wrong number of tags returned | Only tag `document.mappable_tokens`, not `document.tokens`. Excluded tokens (punctuation, FM, untagged) don't get tags. |
-| Tags not in the MHDBDB set | Map your model's output to the 16 MHDBDB tags. If your model uses a different tagset, add a translation step. |
-| Clitics (`inder` = `in` + `der`) | Use `token.form_for_tagging` — it returns the analyzed form for clitics, not the combined written form. |
-| Very slow on full corpus | The full ReM has 2.1M mappable tokens across 406 documents. Use `select_subset()` for development. |
+| Problem | What to do |
+|---------|------------|
+| `ValueError: expected N tags, got M` | Your `predict()` returns the wrong number of tags. Make sure you iterate over `document.mappable_tokens`, not `document.tokens`. |
+| Tags not recognized in the report | You're returning tags outside the 16-tag set. Add a mapping step from your model's tagset to MHDBDB tags. |
+| Model is very slow on full corpus | The full ReM has 2.1M tokens across 406 documents. Start with `SUBSET_SIZE = 3`. For BERT models, consider batching instead of one-word-at-a-time. |
+| `ImportError: No module named 'my_tagger'` | Run the script from the same directory where `my_tagger.py` lives: `cd /path/to/repo && python run_my_tagger.py` |
+| `FileNotFoundError: No XML files found` | The corpus path is wrong. Run `mhd-bench doctor` to auto-detect it, or check [GETTING-STARTED.md](GETTING-STARTED.md). |
