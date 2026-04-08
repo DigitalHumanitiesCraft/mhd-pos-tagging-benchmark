@@ -196,12 +196,93 @@ mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
 
 The JSON file contains accuracy, per-tag metrics, and the full confusion matrix. You can process it further in Python, R, or any other tool.
 
-## Next steps
+## Step 7: Compare two models
 
-- **More documents:** Increase `--subset` gradually (5, 10, 50). Results stabilize with more data, but API costs rise.
-- **Caching:** Re-running the same command reuses previously tagged documents. You can run `--subset 10`, then later `--subset 20`: the first 10 come from cache.
-- **Compare models:** Run `evaluate` for each model separately, then use `compare` for a side-by-side table. See the README for details.
-- **Custom models:** If you have a BERT, CRF, or other tagger, see the [Model Adapter Guide](MODEL-ADAPTER-GUIDE.md).
+This is the core use case — "Which model tags MHG better?" The workflow is: evaluate each model separately (results are cached), then compare.
+
+### Run each model
+
+```bash
+# Model 1: Claude Opus 4.6 (via CLI)
+mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
+  --adapter cli \
+  --cli-cmd "claude -p --model opus" \
+  --model claude-opus-4.6 \
+  --subset 3
+
+# Model 2: Gemini 2.5 Pro (via CLI)
+mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
+  --adapter cli \
+  --cli-cmd "gemini -m gemini-2.5-pro -p" \
+  --model gemini-2.5-pro \
+  --subset 3
+```
+
+Each run takes a few minutes (depending on the model and document sizes). Results are cached automatically in `results/<model-name>/` — if you run the same command again, it finishes instantly.
+
+### Compare the results
+
+```bash
+mhd-bench compare ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
+  --models claude-opus-4.6,gemini-2.5-pro \
+  --subset 3
+```
+
+This loads the cached predictions (no new API calls) and produces a side-by-side table:
+
+```
+              Head-to-Head
+┌──────────────────┬─────────────────┬──────────────┐
+│ Metric           │ claude-opus-4.6 │ gemini-2.5-pro│
+├──────────────────┼─────────────────┼──────────────┤
+│ Accuracy         │          0.9231 │       0.8846 │
+│ Macro-F1         │          0.9048 │       0.8512 │
+│ Micro-F1         │          0.9231 │       0.8846 │
+│ Evaluated tokens │             780 │          780 │
+└──────────────────┴─────────────────┴──────────────┘
+```
+
+Below that, a per-tag F1 comparison shows which word classes each model handles better.
+
+### Tips for meaningful comparisons
+
+- **Same subset:** Both `evaluate` runs and `compare` must use the same `--subset` value. The subset is deterministic (same seed), so `--subset 3` always picks the same 3 documents.
+- **Start small:** `--subset 3` for quick tests, `--subset 10` for paper-worthy results, no `--subset` for the full 406-document corpus.
+- **Add baselines:** The `majority` adapter (most frequent tag for every token) gives you a lower bound. Run it once and include it in your comparison:
+
+```bash
+mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
+  --adapter majority --subset 3
+
+mhd-bench compare ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
+  --models majority-class,claude-opus-4.6,gemini-2.5-pro \
+  --subset 3
+```
+
+### Where results are stored
+
+```
+results/
+├── claude-opus-4.6/
+│   └── predictions.jsonl       ← cached predictions, one line per document
+├── gemini-2.5-pro/
+│   └── predictions.jsonl
+└── majority-class/
+    └── predictions.jsonl
+```
+
+These caches are gitignored (local only). Delete a model's folder to force re-evaluation:
+
+```bash
+rm -rf results/claude-opus-4.6/    # next evaluate run will re-tag everything
+```
+
+## Going further
+
+- **More models:** You can compare as many models as you want. Just `evaluate` each one, then list them all in `compare --models a,b,c,d`.
+- **Save as JSON:** Add `--output results/comparison.json` to any `evaluate` command for machine-readable results with confusion matrices.
+- **Custom models:** If you have a BERT, CRF, or other tagger with Python bindings, see the [Model Adapter Guide](MODEL-ADAPTER-GUIDE.md).
+- **Full CLI reference:** Run `mhd-bench evaluate --help` or `mhd-bench compare --help` for all available flags.
 
 ## Problems?
 
