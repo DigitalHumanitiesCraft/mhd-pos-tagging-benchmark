@@ -1,16 +1,13 @@
 """Generic CLI adapter — POS tagging via any LLM CLI tool.
 
-Works with any CLI that accepts a prompt and returns text:
-  - Gemini CLI:  gemini -m gemini-2.5-flash -p
-  - Codex CLI:   codex exec
-  - Copilot CLI: copilot -p -s
-  - Vibe CLI:    vibe --prompt
-  - Any other:   mycli --flag
+Supports two modes:
+1. **Preset mode** (recommended): `--preset claude`, `--preset gemini`, etc.
+   Each preset knows how its CLI handles system prompts, output format, and flags.
+2. **Custom mode** (fallback): `--cli-cmd "my-tool --flag"` for unknown CLIs.
+   System prompt is embedded in the user prompt, output parsed as raw text.
 
-Since most CLIs don't support inline system prompts, the system prompt
-is embedded into the user prompt. The prompt is sent via stdin (avoids
-argument-length limits and shell-escaping issues on Windows). CLIs that
-need a prompt flag (like `-p`) should use `-p ""` — stdin is appended.
+Presets are defined in cli_presets.py (built-in) and optionally overridden
+via cli-profiles.yaml in the repo root.
 """
 
 from __future__ import annotations
@@ -24,6 +21,11 @@ from pathlib import Path
 
 from mhd_pos_benchmark.adapters.base import ModelAdapter
 from mhd_pos_benchmark.adapters.cache import ResultCache
+from mhd_pos_benchmark.adapters.cli_presets import (
+    CliPreset,
+    extract_response,
+    get_preset,
+)
 from mhd_pos_benchmark.adapters.prompt_template import (
     SYSTEM_PROMPT,
     build_chunked_prompts,
@@ -48,22 +50,32 @@ def _build_combined_prompt(system_prompt: str, user_prompt: str) -> str:
     )
 
 
+# Fallback preset for --cli-cmd mode (embed everything, stdin, raw output)
+_CUSTOM_PRESET = CliPreset(
+    name="custom",
+    command="",  # filled from cli_cmd
+    system_prompt="embed",
+    prompt_delivery="stdin",
+    response_format="raw",
+)
+
+
 class GenericCliAdapter(ModelAdapter):
-    """POS tagger using any CLI tool that accepts a prompt argument.
+    """POS tagger using any CLI tool, configured via presets or custom command.
 
-    The prompt is passed as the final positional argument to the CLI command.
-    Response is read from stdout and parsed for a JSON tag array.
+    Preset mode (recommended):
+        GenericCliAdapter(preset="claude", model="opus")
+        GenericCliAdapter(preset="gemini", model="gemini-2.5-pro")
 
-    Examples:
-        GenericCliAdapter("gemini -p")           # Gemini CLI
-        GenericCliAdapter("codex exec")           # OpenAI Codex CLI
-        GenericCliAdapter("copilot -p -s")        # GitHub Copilot CLI
-        GenericCliAdapter("vibe --prompt")         # Mistral Vibe CLI
+    Custom mode (fallback):
+        GenericCliAdapter(cli_cmd="my-tool --flag", model_name="my-model")
     """
 
     def __init__(
         self,
-        cli_cmd: str,
+        preset: str | None = None,
+        cli_cmd: str | None = None,
+        model: str | None = None,
         model_name: str | None = None,
         chunk_size: int = 200,
         cache_dir: Path | None = None,
@@ -71,24 +83,47 @@ class GenericCliAdapter(ModelAdapter):
         timeout: int = 300,
         delay: float = 1.0,
     ) -> None:
-        self._cli_parts = shlex.split(cli_cmd)
-        if not self._cli_parts:
-            raise ValueError("--cli-cmd must not be empty")
+        # Resolve preset or custom command
+        if preset:
+            self._preset = get_preset(preset)
+            if self._preset is None:
+                available = ", ".join(
+                    ["claude", "gemini", "codex", "copilot"]
+                )
+                raise ValueError(
+                    f"Unknown CLI preset: '{preset}'. "
+                    f"Available: {available}. "
+                    f"Or use --cli-cmd for custom CLIs."
+                )
+            self._model = model or self._preset.default_model or "default"
+        elif cli_cmd:
+            self._preset = CliPreset(
+                name="custom",
+                command=cli_cmd,
+                system_prompt="embed",
+                prompt_delivery="stdin",
+                response_format="raw",
+            )
+            self._model = model or model_name or f"cli-{shlex.split(cli_cmd)[0]}"
+        else:
+            raise ValueError("Either --preset or --cli-cmd is required")
 
-        self._executable = self._cli_parts[0]
-        # Resolve full path (needed on Windows for npm-installed .cmd wrappers)
-        resolved = shutil.which(self._executable)
-        if resolved:
-            self._cli_parts[0] = resolved
-        self._model_name = model_name or f"cli-{self._executable}"
+        # model_name for display/cache (--model overrides)
+        self._model_name = model_name or self._model
         self._chunk_size = chunk_size
         self._max_retries = max_retries
         self._timeout = timeout
         self._delay = delay
 
-        available, msg = self._check_availability()
-        if not available:
-            raise OSError(msg)
+        # Resolve executable
+        self._executable = self._preset.executable or shlex.split(self._preset.command)[0]
+        resolved = shutil.which(self._executable)
+        if not resolved:
+            raise OSError(
+                f"CLI tool '{self._executable}' not found on PATH. "
+                f"Install it first."
+            )
+        self._resolved_executable = resolved
 
         config_hash = ResultCache.make_config_hash(chunk_size, SYSTEM_PROMPT)
         self._cache = ResultCache(self._model_name, cache_dir, config_hash=config_hash)
@@ -97,14 +132,41 @@ class GenericCliAdapter(ModelAdapter):
     def name(self) -> str:
         return self._model_name
 
-    def _check_availability(self) -> tuple[bool, str]:
-        if shutil.which(self._executable) is not None:
-            return (True, "")
-        return (
-            False,
-            f"CLI tool '{self._executable}' not found on PATH. "
-            f"Install it or check your --cli-cmd.",
-        )
+    def _build_command(self, user_prompt: str) -> tuple[list[str], str | None]:
+        """Build the subprocess command and optional stdin input.
+
+        Returns (cmd_list, stdin_input_or_none).
+        """
+        preset = self._preset
+
+        # Build the combined prompt (system + user) for embed mode
+        if preset.system_prompt == "embed":
+            full_prompt = _build_combined_prompt(SYSTEM_PROMPT, user_prompt)
+        else:
+            full_prompt = user_prompt
+
+        # Build command from preset template (model substituted, prompt handled separately)
+        cmd_str = preset.command.format(model=self._model)
+        cmd = shlex.split(cmd_str)
+
+        # Resolve executable path (Windows .cmd wrappers)
+        cmd[0] = self._resolved_executable
+
+        # Add system prompt flag if separate
+        if preset.system_prompt == "flag" and preset.system_prompt_flag:
+            cmd.extend([preset.system_prompt_flag, SYSTEM_PROMPT])
+
+        # Add extra flags
+        cmd.extend(preset.extra_flags)
+
+        # Prompt delivery: stdin or appended as argument
+        if preset.prompt_delivery == "argument":
+            cmd.append(full_prompt)
+            stdin = None
+        else:
+            stdin = full_prompt
+
+        return cmd, stdin
 
     def predict(self, document: Document) -> list[str]:
         mappable = document.mappable_tokens
@@ -142,26 +204,15 @@ class GenericCliAdapter(ModelAdapter):
         return all_tags
 
     def _call_cli(self, user_prompt: str, expected_count: int) -> list[str]:
-        """Call the CLI tool with the combined prompt via stdin.
-
-        Prompt is sent via stdin rather than as a CLI argument to avoid
-        argument-length limits (Windows: ~8191 chars) and shell-escaping issues.
-        If the command ends with a prompt flag (e.g. -p, --prompt), an empty
-        string is appended so the flag gets a value and stdin provides the content.
-        """
-        combined = _build_combined_prompt(SYSTEM_PROMPT, user_prompt)
-        cmd = list(self._cli_parts)
-        # If the last arg is a prompt flag, it needs a value — use empty string
-        # so the real content comes from stdin
-        if cmd[-1] in ("-p", "--prompt"):
-            cmd.append("")
+        """Call the CLI tool with retries and response validation."""
+        cmd, stdin_input = self._build_command(user_prompt)
         last_error: Exception | None = None
 
         for attempt in range(1, self._max_retries + 1):
             try:
                 result = subprocess.run(
                     cmd,
-                    input=combined,
+                    input=stdin_input,
                     capture_output=True,
                     encoding="utf-8",
                     timeout=self._timeout,
@@ -173,10 +224,7 @@ class GenericCliAdapter(ModelAdapter):
                         f"{result.stderr[:500]}"
                     )
 
-                response_text = result.stdout.strip()
-                if not response_text:
-                    raise ValueError("CLI returned empty stdout")
-
+                response_text = extract_response(result.stdout, self._preset)
                 tags = parse_tag_response(response_text, expected_count)
                 return tags
 

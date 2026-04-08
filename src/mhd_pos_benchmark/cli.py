@@ -12,6 +12,7 @@ from rich.table import Table
 console = Console()
 
 ADAPTER_CHOICES = ["passthrough", "majority", "api", "cli"]
+CLI_PRESETS = ["claude", "gemini", "codex", "copilot"]
 
 
 def _resolve_corpus_dir(corpus_dir: Path | None) -> Path:
@@ -79,6 +80,7 @@ def _make_adapter(
     model: str | None = None,
     provider: str | None = None,
     api_base: str | None = None,
+    preset: str | None = None,
 ):
     """Instantiate an adapter by name."""
     if name == "passthrough":
@@ -107,29 +109,32 @@ def _make_adapter(
     elif name == "cli":
         from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
 
-        if not cli_cmd:
-            raise click.UsageError("--adapter cli requires --cli-cmd")
-        return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model)
+        if preset:
+            console.print(f"Using CLI preset: [bold]{preset}[/bold]")
+            return GenericCliAdapter(preset=preset, model=model, model_name=model)
+        elif cli_cmd:
+            return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model)
+        else:
+            raise click.UsageError(
+                "--adapter cli requires --preset or --cli-cmd.\n"
+                f"  Presets: {', '.join(CLI_PRESETS)}\n"
+                "  Example: --adapter cli --preset claude --model opus\n"
+                "  Example: --adapter cli --cli-cmd \"my-tool --flag\""
+            )
     else:
+        # Smart suggestions for common mistakes
         suggestions = {
-            # Provider names
-            "gemini": "--adapter api --provider gemini  (API) or  --adapter cli --cli-cmd \"gemini -p\"  (CLI)",
+            "gemini": "--adapter api --provider gemini  or  --adapter cli --preset gemini",
             "openai": "--adapter api --provider openai",
             "mistral": "--adapter api --provider mistral",
             "groq": "--adapter api --provider groq",
-            # CLI tool names
-            "claude": "--adapter cli --cli-cmd \"claude -p --model opus\"",
-            "codex": "--adapter cli --cli-cmd \"codex exec\"",
-            "copilot": "--adapter cli --cli-cmd \"copilot -p -s\"",
-            # Model names users might try as adapter names
+            "claude": "--adapter cli --preset claude",
+            "codex": "--adapter cli --preset codex",
+            "copilot": "--adapter cli --preset copilot",
             "gpt-4o": "--adapter api --provider openai --model gpt-4o",
-            "gpt-4": "--adapter api --provider openai --model gpt-4",
             "gpt": "--adapter api --provider openai",
-            "opus": "--adapter cli --cli-cmd \"claude -p --model opus\"",
-            "sonnet": "--adapter cli --cli-cmd \"claude -p --model sonnet\"",
-            "claude-opus": "--adapter cli --cli-cmd \"claude -p --model opus\"",
-            "gemini-2.5-pro": "--adapter api --provider gemini --model gemini-2.5-pro",
-            "gemini-2.5-flash": "--adapter api --provider gemini --model gemini-2.5-flash",
+            "opus": "--adapter cli --preset claude --model opus",
+            "sonnet": "--adapter cli --preset claude --model sonnet",
             "llama": "--adapter api --api-base http://localhost:11434/v1 --model llama3",
         }
         hint = suggestions.get(name.lower(), "")
@@ -282,6 +287,12 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     default=None,
     help="Custom API base URL (e.g. 'http://localhost:11434/v1' for ollama).",
 )
+@click.option(
+    "--preset",
+    type=str,
+    default=None,
+    help="CLI preset for --adapter cli (claude, gemini, codex, copilot). Knows flags, output format, etc.",
+)
 def evaluate(
     corpus_dir: Path | None,
     adapter: str,
@@ -294,6 +305,7 @@ def evaluate(
     model_name: str | None,
     provider: str | None,
     api_base: str | None,
+    preset: str | None,
 ) -> None:
     """Run evaluation pipeline on the corpus."""
     from rich.progress import Progress
@@ -310,7 +322,7 @@ def evaluate(
     documents = _parse_and_map(corpus_dir, subset)
     model = _make_adapter(
         adapter, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
-        provider=provider, api_base=api_base,
+        provider=provider, api_base=api_base, preset=preset,
     )
 
     console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
@@ -395,6 +407,12 @@ def evaluate(
     default=None,
     help="Custom API base URL.",
 )
+@click.option(
+    "--preset",
+    type=str,
+    default=None,
+    help="CLI preset for 'cli' adapter entries (claude, gemini, codex, copilot).",
+)
 def compare(
     corpus_dir: Path | None,
     adapters: str | None,
@@ -408,6 +426,7 @@ def compare(
     model_name: str | None,
     provider: str | None,
     api_base: str | None,
+    preset: str | None,
 ) -> None:
     """Compare multiple models side-by-side.
 
@@ -471,7 +490,7 @@ def compare(
         for name in adapter_names:
             model = _make_adapter(
                 name, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
-                provider=provider, api_base=api_base,
+                provider=provider, api_base=api_base, preset=preset,
             )
             console.print(f"\nRunning: [bold]{model.name}[/bold]...")
             with Progress(console=console) as progress:

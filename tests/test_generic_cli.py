@@ -64,7 +64,7 @@ class TestGenericCliAdapter:
         assert adapter.name == "gemini-2.5-pro"
 
     def test_prompt_passed_via_stdin(self, monkeypatch, tmp_path):
-        """Prompt is sent via stdin, not as a CLI argument."""
+        """Custom CLI adapter sends prompt via stdin."""
         calls = []
 
         def fake_run(cmd, **kwargs):
@@ -80,9 +80,6 @@ class TestGenericCliAdapter:
         adapter.predict(doc)
 
         cmd, kwargs = calls[0]
-        # -p flag gets empty string appended so stdin provides the content
-        assert "-p" in cmd
-        assert cmd[cmd.index("-p") + 1] == ""
         # Prompt content goes via stdin (input kwarg)
         stdin_text = kwargs["input"]
         assert "Tag each word" in stdin_text
@@ -204,11 +201,11 @@ class TestGenericCliAdapter:
         with pytest.raises(OSError, match="not found on PATH"):
             GenericCliAdapter(cli_cmd="nonexistent-tool -p", cache_dir=tmp_path)
 
-    def test_empty_cli_cmd_raises(self, monkeypatch, tmp_path):
+    def test_no_preset_no_cli_cmd_raises(self, monkeypatch, tmp_path):
         from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
 
-        with pytest.raises(ValueError, match="must not be empty"):
-            GenericCliAdapter(cli_cmd="", cache_dir=tmp_path)
+        with pytest.raises(ValueError, match="--preset or --cli-cmd"):
+            GenericCliAdapter(cache_dir=tmp_path)
 
     def test_caching(self, monkeypatch, tmp_path):
         call_count = {"n": 0}
@@ -329,7 +326,7 @@ class TestGenericCliCli:
         assert "test-model" in result.output
         assert "Accuracy" in result.output
 
-    def test_cli_adapter_requires_cli_cmd(self):
+    def test_cli_adapter_requires_preset_or_cli_cmd(self):
         from pathlib import Path
 
         from click.testing import CliRunner
@@ -343,4 +340,4 @@ class TestGenericCliCli:
             "--adapter", "cli",
         ])
         assert result.exit_code != 0
-        assert "requires --cli-cmd" in result.output
+        assert "--preset" in result.output or "--cli-cmd" in result.output
