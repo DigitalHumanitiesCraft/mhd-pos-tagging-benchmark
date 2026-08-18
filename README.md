@@ -19,17 +19,42 @@ mhd-bench evaluate --adapter passthrough --subset 3   # sanity check (100% accur
 ## Evaluate a Model
 
 ```bash
-# Via CLI tool (Claude, Gemini CLI, Codex, Copilot, ...)
+# Via CLI tool (Claude, Antigravity, Gemini CLI, Codex, Copilot, ...)
 mhd-bench evaluate --adapter cli \
-  --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
+  --preset claude --model claude-opus-5 --subset 3
 
 # Via API (OpenAI, Gemini, Mistral, Groq, Ollama, ...)
 mhd-bench evaluate --adapter api \
-  --provider gemini --model gemini-2.5-pro --api-key --subset 3
+  --provider gemini --model gemini-3.1-pro-preview --api-key --subset 3
 
 # Via custom adapter (BERT, CRF, HMM, ...)
 # See docs/guides/MODEL-ADAPTER-GUIDE.md
 ```
+
+Prefer `--preset` over `--cli-cmd`: presets carry the flags that keep the coding
+harness out of the measurement, and they run the tool in an empty directory so it
+cannot read the benchmark's own documentation. See
+[CLI presets](docs/ARCHITECTURE.md#cli-presets).
+
+Always pass an explicit, versioned `--model` for results you intend to publish.
+Aliases like `opus` point at a different model every few months, which makes a
+cached result impossible to attribute later.
+
+For the same reason, pin the documents once you leave exploration:
+
+```bash
+# Exploration: samples the corpus, and prints the pinned equivalent
+mhd-bench evaluate --adapter cli --preset claude --model claude-opus-5 --subset 8
+
+# Publication: names the texts, so the run stays repeatable
+mhd-bench evaluate --adapter cli --preset claude --model claude-opus-5 \
+  --documents M033,M174,M040,M255,M226,M021,M114,M121S
+```
+
+`--subset` re-samples whenever the corpus or the sampling code changes, which
+quietly detaches earlier cached runs. Every saved JSON result records the
+`document_ids` it covers, and `compare` warns when models were not scored on the
+same texts.
 
 Results are cached in `results/<model>/predictions.jsonl` and reused automatically.
 
@@ -37,7 +62,7 @@ Results are cached in `results/<model>/predictions.jsonl` and reused automatical
 
 ```bash
 # Compare cached results from previous evaluate runs — instant, no API calls
-mhd-bench compare --models claude-opus-4.6,gemini-2.5-pro --subset 3
+mhd-bench compare --models claude-opus-5,gemini-3.1-pro-preview --subset 3
 
 # Compare baselines live
 mhd-bench compare --adapters passthrough,majority --subset 3
@@ -59,9 +84,12 @@ Corpus directory is auto-detected if omitted.
 |------|-------------|
 | `--adapter` | `passthrough`, `majority`, `api`, `cli` |
 | `--models A,B` | Compare cached results from previous evaluate runs |
-| `--subset N` | Evaluate on N representative documents |
+| `--subset N` | Sample N representative documents (exploration) |
+| `--documents ID,ID` | Evaluate exactly these documents (reproducible runs) |
+| `--chunk-size N` | Tokens per model call (default 200) |
 | `--model NAME` | Model name for display and caching |
-| `--cli-cmd CMD` | CLI command (for `--adapter cli`) |
+| `--preset NAME` | `claude`, `antigravity`, `gemini`, `codex`, `copilot` (for `--adapter cli`) |
+| `--cli-cmd CMD` | Custom CLI command, when no preset fits |
 | `--provider NAME` | `openai`, `gemini`, `mistral`, `groq` (for `--adapter api`) |
 | `--api-key [VALUE]` | API key; bare flag prompts interactively |
 | `--api-base URL` | Custom API base URL (for local models) |

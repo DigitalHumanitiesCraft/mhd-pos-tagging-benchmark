@@ -129,6 +129,114 @@ def test_evaluate_unknown_adapter():
     assert result.exit_code != 0
 
 
+class TestDocumentSelection:
+    """--documents pins the evaluated set; --subset only samples it."""
+
+    def test_evaluate_named_document(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "passthrough",
+            "--documents", "T001",
+        ])
+        assert result.exit_code == 0
+        assert "Documents selected" in result.output
+
+    def test_unknown_document_id_fails_clearly(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "passthrough",
+            "--documents", "T001,NOSUCHDOC",
+        ])
+        assert result.exit_code != 0
+        assert "not in corpus" in result.output
+
+    def test_documents_and_subset_are_mutually_exclusive(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "passthrough",
+            "--documents", "T001", "--subset", "1",
+        ])
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
+
+    def test_subset_prints_pinned_equivalent(self):
+        """A sampled run should tell you how to repeat it exactly."""
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "passthrough", "--subset", "1",
+        ])
+        assert result.exit_code == 0
+        assert "--documents T001" in result.output
+
+    def test_saved_json_records_document_ids(self, tmp_path):
+        import json
+
+        out = tmp_path / "result.json"
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "passthrough",
+            "--documents", "T001", "--output", str(out),
+        ])
+        assert result.exit_code == 0
+        assert json.loads(out.read_text())["document_ids"] == ["T001"]
+
+    def test_compare_accepts_documents(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "compare", str(FIXTURES_DIR), "--adapters", "passthrough,majority",
+            "--documents", "T001",
+        ])
+        assert result.exit_code == 0
+        assert "Head-to-Head" in result.output
+
+
+class TestChunkSize:
+    def test_chunk_size_reaches_the_adapter(self, tmp_path, monkeypatch):
+        captured = {}
+
+        class FakeAdapter:
+            name = "fake"
+
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def predict(self, document):
+                return [t.pos_mhdbdb for t in document.mappable_tokens]
+
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.GenericCliAdapter", FakeAdapter
+        )
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "cli",
+            "--cli-cmd", "fake -p", "--chunk-size", "500",
+        ])
+        assert result.exit_code == 0, result.output
+        assert captured["chunk_size"] == 500
+
+    def test_chunk_size_omitted_leaves_adapter_default(self, tmp_path, monkeypatch):
+        captured = {}
+
+        class FakeAdapter:
+            name = "fake"
+
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def predict(self, document):
+                return [t.pos_mhdbdb for t in document.mappable_tokens]
+
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.GenericCliAdapter", FakeAdapter
+        )
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "evaluate", str(FIXTURES_DIR), "--adapter", "cli", "--cli-cmd", "fake -p",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "chunk_size" not in captured
+
+
 def test_version():
     runner = CliRunner()
     result = runner.invoke(cli, ["--version"])

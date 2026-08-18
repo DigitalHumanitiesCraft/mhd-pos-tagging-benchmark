@@ -81,6 +81,28 @@ def align_document(document: Document, adapter: ModelAdapter) -> AlignmentResult
     )
 
 
+def coverage_mismatch(
+    coverage: dict[str, set[str]],
+) -> tuple[dict[str, list[str]], list[str]] | None:
+    """Detect models scored on different document sets.
+
+    A side-by-side table implies the numbers describe the same texts. With
+    `--continue-on-error`, or with caches from different runs, they may not,
+    and no metric in the table would reveal it.
+
+    Returns None when every model covers the same documents. Otherwise returns
+    (per-model documents not shared by all, sorted shared documents).
+    """
+    if len(coverage) < 2:
+        return None
+    if len({frozenset(ids) for ids in coverage.values()}) == 1:
+        return None
+
+    shared = set.intersection(*coverage.values())
+    extras = {name: sorted(ids - shared) for name, ids in coverage.items()}
+    return extras, sorted(shared)
+
+
 def align_corpus(
     documents: list[Document],
     adapter: ModelAdapter,

@@ -7,11 +7,11 @@ You have a POS tagger — a fine-tuned BERT, a CRF, an HMM, a dictionary, or any
 **No, if** you want to use an existing LLM (Claude, Gemini, GPT, Mistral, etc.). For those, use the built-in adapters — no code required:
 
 ```bash
-# LLM via CLI tool (Claude, Gemini CLI, Codex, etc.)
-mhd-bench evaluate --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6
+# LLM via CLI tool (Claude, Antigravity, Codex, etc.)
+mhd-bench evaluate --adapter cli --preset claude --model claude-opus-5
 
 # LLM via API key (OpenAI, Gemini, Mistral, Groq, etc.)
-mhd-bench evaluate --adapter api --provider gemini --model gemini-2.5-pro --api-key
+mhd-bench evaluate --adapter api --provider gemini --model gemini-3.1-pro-preview --api-key
 ```
 
 See [GETTING-STARTED.md](GETTING-STARTED.md) for details.
@@ -123,7 +123,7 @@ from rich.console import Console
 
 from mhd_pos_benchmark.data.rem_parser import parse_corpus
 from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
-from mhd_pos_benchmark.data.subset import select_subset
+from mhd_pos_benchmark.data.subset import select_by_ids, select_subset
 from mhd_pos_benchmark.evaluation.comparator import align_corpus
 from mhd_pos_benchmark.evaluation.metrics import compute_metrics
 from mhd_pos_benchmark.evaluation.report import print_report, save_json
@@ -134,6 +134,9 @@ from my_tagger import MyTagger
 # --- Configuration (change these) ---
 CORPUS_DIR = Path("ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/")
 SUBSET_SIZE = 3   # Start small! Increase once it works.
+# Once you compare against other models, replace sampling with a fixed list, so
+# every model is scored on the same texts and the run stays repeatable:
+DOCUMENT_IDS = []  # e.g. ["M033", "M174", "M040"]
 # -------------------------------------
 
 # Load and prepare corpus
@@ -142,8 +145,11 @@ documents = parse_corpus(CORPUS_DIR)
 mapper = TagsetMapper()
 for doc in documents:
     mapper.map_document(doc)
-documents = select_subset(documents, n=SUBSET_SIZE)
-print(f"Testing on {len(documents)} documents")
+if DOCUMENT_IDS:
+    documents = select_by_ids(documents, DOCUMENT_IDS)
+else:
+    documents = select_subset(documents, n=SUBSET_SIZE)
+print(f"Testing on {len(documents)} documents: {', '.join(d.id for d in documents)}")
 
 # Run your model
 adapter = MyTagger()
@@ -279,6 +285,7 @@ class CrfTagger(ModelAdapter):
 - [ ] Verify your model returns only tags from the 16-tag set
 - [ ] Verify the tag count matches: `len(result) == len(document.mappable_tokens)`
 - [ ] Then increase: `SUBSET_SIZE = 10`, then remove the subset for all 406 documents
+- [ ] For numbers you report: set `DOCUMENT_IDS` to the same list the other models used
 
 ## Troubleshooting
 

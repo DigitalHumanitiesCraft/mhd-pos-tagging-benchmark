@@ -8,14 +8,21 @@ Supports two modes:
 
 Presets are defined in cli_presets.py (built-in) and optionally overridden
 via cli-profiles.yaml in the repo root.
+
+Calls run in an empty temporary directory unless the preset opts out. Agentic
+CLIs pick up project instruction files from their working directory, which
+would let the tagger read the benchmark's own documentation. See the
+cli_presets module docstring for the measurements behind this.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -50,6 +57,43 @@ def _build_combined_prompt(system_prompt: str, user_prompt: str) -> str:
     )
 
 
+def _npm_shim_launcher(executable_path: str) -> list[str] | None:
+    """Turn an npm .CMD/.BAT wrapper into a direct `node <script>` invocation.
+
+    On Windows, npm installs CLIs as batch wrappers. cmd.exe mangles a long
+    multi-line argument passed through such a wrapper: measured 2026-08-18, the
+    Copilot CLI received only the first line of the tagging prompt and answered
+    nothing usable, while the same call through node returned correct tags.
+
+    Only used for presets that pass the prompt as an argument; stdin delivery is
+    unaffected. Returns None when the path is not an npm wrapper or the target
+    script cannot be found, in which case the caller keeps the original path.
+    """
+    path = Path(executable_path)
+    if path.suffix.lower() not in {".cmd", ".bat"}:
+        return None
+
+    node = shutil.which("node")
+    if not node:
+        return None
+
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+
+    match = re.search(r'["\']?%~?dp0%?[\\/]?([^"\'\s%]*node_modules[^"\'\s%]*\.js)', content)
+    if not match:
+        return None
+
+    script = (path.parent / match.group(1)).resolve()
+    if not script.exists():
+        return None
+
+    logger.info("Bypassing npm wrapper %s, calling %s directly", path, script)
+    return [node, str(script)]
+
+
 # Fallback preset for --cli-cmd mode (embed everything, stdin, raw output)
 _CUSTOM_PRESET = CliPreset(
     name="custom",
@@ -64,8 +108,8 @@ class GenericCliAdapter(ModelAdapter):
     """POS tagger using any CLI tool, configured via presets or custom command.
 
     Preset mode (recommended):
-        GenericCliAdapter(preset="claude", model="opus")
-        GenericCliAdapter(preset="gemini", model="gemini-2.5-pro")
+        GenericCliAdapter(preset="claude", model="claude-opus-5")
+        GenericCliAdapter(preset="gemini", model="gemini-3.1-pro-preview")
 
     Custom mode (fallback):
         GenericCliAdapter(cli_cmd="my-tool --flag", model_name="my-model")
@@ -80,22 +124,25 @@ class GenericCliAdapter(ModelAdapter):
         chunk_size: int = 200,
         cache_dir: Path | None = None,
         max_retries: int = 3,
-        timeout: int = 300,
+        timeout: int | None = None,
         delay: float = 1.0,
+        isolate_cwd: bool | None = None,
     ) -> None:
         # Resolve preset or custom command
         if preset:
             self._preset = get_preset(preset)
             if self._preset is None:
-                available = ", ".join(
-                    ["claude", "gemini", "codex", "copilot"]
-                )
+                from mhd_pos_benchmark.adapters.cli_presets import list_presets
+
+                available = ", ".join(sorted(list_presets()))
                 raise ValueError(
                     f"Unknown CLI preset: '{preset}'. "
                     f"Available: {available}. "
                     f"Or use --cli-cmd for custom CLIs."
                 )
             self._model = model or self._preset.default_model or "default"
+            if self._preset.caveat:
+                logger.warning("Preset '%s': %s", preset, self._preset.caveat)
         elif cli_cmd:
             self._preset = CliPreset(
                 name="custom",
@@ -112,13 +159,31 @@ class GenericCliAdapter(ModelAdapter):
         self._model_name = model_name or self._model
         self._chunk_size = chunk_size
         self._max_retries = max_retries
-        self._timeout = timeout
+        # Time per call scales with chunk size: a 1364-token chunk took 363 s
+        # against Claude Opus 5, which the previous fixed 300 s would have
+        # killed on every attempt. 300 s stays the floor for small chunks.
+        self._timeout = timeout if timeout is not None else max(300, int(chunk_size * 0.8))
         self._delay = delay
+        self._isolate_cwd = (
+            self._preset.isolate_cwd if isolate_cwd is None else isolate_cwd
+        )
+        # Empty directory the CLI is invoked from, so it finds no project files.
+        # Created lazily on first call and reused for the whole run.
+        self._workdir: str | None = None
 
         # Resolve executable
         self._executable = self._preset.executable or shlex.split(self._preset.command)[0]
-        resolved = shutil.which(self._executable)
+        from mhd_pos_benchmark.doctor import resolve_real_executable
+
+        resolved = resolve_real_executable(self._executable)
         if not resolved:
+            shadowed = shutil.which(self._executable)
+            if shadowed:
+                raise OSError(
+                    f"Only an editor-bundled launcher was found for "
+                    f"'{self._executable}' ({shadowed}). Install the real CLI; "
+                    f"the launcher prompts interactively and cannot be scripted."
+                )
             raise OSError(
                 f"CLI tool '{self._executable}' not found on PATH. "
                 f"Install it first."
@@ -145,12 +210,20 @@ class GenericCliAdapter(ModelAdapter):
         else:
             full_prompt = user_prompt
 
-        # Build command from preset template (model substituted, prompt handled separately)
-        cmd_str = preset.command.format(model=self._model)
-        cmd = shlex.split(cmd_str)
+        # Split first, substitute after: model names may contain spaces
+        # (e.g. Antigravity's "Gemini 3.1 Pro (High)") and must stay one argument.
+        cmd = [
+            part.replace("{model}", self._model)
+            for part in shlex.split(preset.command)
+        ]
 
-        # Resolve executable path (Windows .cmd wrappers)
-        cmd[0] = self._resolved_executable
+        # Resolve executable path. For argument-delivered prompts, bypass npm
+        # batch wrappers, which truncate long multi-line arguments on Windows.
+        if preset.prompt_delivery == "argument":
+            launcher = _npm_shim_launcher(self._resolved_executable)
+        else:
+            launcher = None
+        cmd[:1] = launcher or [self._resolved_executable]
 
         # Add system prompt flag if separate
         if preset.system_prompt == "flag" and preset.system_prompt_flag:
@@ -203,9 +276,19 @@ class GenericCliAdapter(ModelAdapter):
         self._cache.put(document.id, all_tags)
         return all_tags
 
+    def _get_workdir(self) -> str | None:
+        """Return the working directory for the subprocess, or None for the current one."""
+        if not self._isolate_cwd:
+            return None
+        if self._workdir is None:
+            self._workdir = tempfile.mkdtemp(prefix="mhd-bench-cli-")
+            logger.debug("Isolated working directory: %s", self._workdir)
+        return self._workdir
+
     def _call_cli(self, user_prompt: str, expected_count: int) -> list[str]:
         """Call the CLI tool with retries and response validation."""
         cmd, stdin_input = self._build_command(user_prompt)
+        cwd = self._get_workdir()
         last_error: Exception | None = None
 
         for attempt in range(1, self._max_retries + 1):
@@ -216,6 +299,7 @@ class GenericCliAdapter(ModelAdapter):
                     capture_output=True,
                     encoding="utf-8",
                     timeout=self._timeout,
+                    cwd=cwd,
                 )
 
                 if result.returncode != 0:

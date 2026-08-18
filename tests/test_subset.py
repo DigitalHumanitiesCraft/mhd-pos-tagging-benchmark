@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mhd_pos_benchmark.data.corpus import Document, Token
-from mhd_pos_benchmark.data.subset import describe_subset, select_subset
+from mhd_pos_benchmark.data.subset import (
+    describe_subset,
+    parse_document_ids,
+    select_by_ids,
+    select_subset,
+)
 
 
 def _make_doc(doc_id: str, genre: str | None, n_tokens: int = 10) -> Document:
@@ -85,3 +92,40 @@ def test_describe_subset():
     assert "8 mappable tokens" in desc
     assert "V=" in desc
     assert "P=" in desc
+
+
+class TestParseDocumentIds:
+    def test_comma_separated(self):
+        assert parse_document_ids("M033,M174,M040") == ["M033", "M174", "M040"]
+
+    def test_whitespace_and_mixed(self):
+        assert parse_document_ids("M033, M174  M040") == ["M033", "M174", "M040"]
+
+    def test_deduplicates_keeping_order(self):
+        assert parse_document_ids("M033,M174,M033") == ["M033", "M174"]
+
+    def test_empty(self):
+        assert parse_document_ids("  ,, ") == []
+
+
+class TestSelectByIds:
+    def test_returns_documents_in_given_order(self):
+        docs = [_make_doc("M001", "V"), _make_doc("M002", "P"), _make_doc("M003", "V")]
+        result = select_by_ids(docs, ["M003", "M001"])
+        assert [d.id for d in result] == ["M003", "M001"]
+
+    def test_unknown_id_raises(self):
+        """Silently dropping an ID would change what a published number covers."""
+        docs = [_make_doc("M001", "V")]
+        with pytest.raises(ValueError, match="not in corpus"):
+            select_by_ids(docs, ["M001", "M999"])
+
+    def test_error_lists_every_missing_id(self):
+        docs = [_make_doc("M001", "V")]
+        with pytest.raises(ValueError, match="2 document ID"):
+            select_by_ids(docs, ["X1", "X2"])
+
+    def test_error_suggests_near_misses(self):
+        docs = [_make_doc("M033", "V"), _make_doc("M034", "V")]
+        with pytest.raises(ValueError, match="did you mean"):
+            select_by_ids(docs, ["M035"])

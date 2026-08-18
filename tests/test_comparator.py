@@ -121,3 +121,35 @@ def test_aligned_pair_fields():
     assert pair.form == "w0"
     assert pair.gold == "NOM"
     assert pair.predicted == "VRB"
+
+
+class TestCoverageMismatch:
+    """Two accuracy numbers side by side must describe the same texts."""
+
+    def test_identical_coverage_is_silent(self):
+        from mhd_pos_benchmark.evaluation.comparator import coverage_mismatch
+
+        assert coverage_mismatch({"a": {"M1", "M2"}, "b": {"M2", "M1"}}) is None
+
+    def test_single_model_is_silent(self):
+        from mhd_pos_benchmark.evaluation.comparator import coverage_mismatch
+
+        assert coverage_mismatch({"a": {"M1"}}) is None
+
+    def test_partial_overlap_reports_extras_and_shared(self):
+        from mhd_pos_benchmark.evaluation.comparator import coverage_mismatch
+
+        result = coverage_mismatch({"a": {"M1", "M2"}, "b": {"M2", "M3"}})
+        assert result is not None
+        extras, shared = result
+        assert extras == {"a": ["M1"], "b": ["M3"]}
+        assert shared == ["M2"]
+
+    def test_disjoint_coverage_reports_empty_shared(self):
+        from mhd_pos_benchmark.evaluation.comparator import coverage_mismatch
+
+        result = coverage_mismatch({"a": {"M1"}, "b": {"M9"}})
+        assert result is not None
+        extras, shared = result
+        assert shared == []
+        assert extras == {"a": ["M1"], "b": ["M9"]}

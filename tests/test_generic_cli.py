@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import subprocess
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -289,6 +290,181 @@ class TestGenericCliAdapter:
         doc = _make_document(2)
         result = adapter.predict(doc)
         assert result == ["NOM", "VRB"]
+
+
+class TestWorkingDirectoryIsolation:
+    """Agentic CLIs read project instruction files from their working directory.
+
+    Measured 2026-08-18: a `claude -p` call started inside this repository could
+    answer questions about the benchmark's own corpus and tagset, and carried
+    ~25k tokens of harness context per chunk. Running in an empty directory
+    removes both.
+    """
+
+    def _capture_cwd(self, monkeypatch):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(kwargs.get("cwd"))
+            return subprocess.CompletedProcess(
+                args=[], returncode=0, stdout='["NOM"]', stderr="",
+            )
+
+        monkeypatch.setattr("mhd_pos_benchmark.adapters.generic_cli.subprocess.run", fake_run)
+        return calls
+
+    def test_runs_in_empty_directory_by_default(self, monkeypatch, tmp_path):
+        calls = self._capture_cwd(monkeypatch)
+        adapter = _make_adapter(monkeypatch, tmp_path)
+        adapter.predict(_make_document(1))
+
+        cwd = calls[0]
+        assert cwd is not None
+        assert list(Path(cwd).iterdir()) == []
+        assert Path(cwd).resolve() != Path.cwd().resolve()
+
+    def test_same_directory_reused_across_chunks(self, monkeypatch, tmp_path):
+        calls = self._capture_cwd(monkeypatch)
+        adapter = _make_adapter(monkeypatch, tmp_path, chunk_size=1)
+        adapter.predict(_make_document(3))
+
+        assert len(calls) == 3
+        assert len(set(calls)) == 1
+
+    def test_isolation_can_be_disabled(self, monkeypatch, tmp_path):
+        calls = self._capture_cwd(monkeypatch)
+        adapter = _make_adapter(monkeypatch, tmp_path, isolate_cwd=False)
+        adapter.predict(_make_document(1))
+
+        assert calls[0] is None
+
+
+class TestExecutableResolution:
+    """The benchmark must never measure an editor launcher or a mangled prompt."""
+
+    def test_skips_editor_shim_for_the_real_cli(self, monkeypatch, tmp_path):
+        from mhd_pos_benchmark.doctor import resolve_real_executable
+
+        shim = r"C:\Users\x\AppData\Roaming\Code\User\globalStorage\copilot.CMD"
+        real = r"C:\Users\x\AppData\Roaming\npm\copilot.CMD"
+
+        def fake_which(name, path=None):
+            if path is None:
+                return shim
+            return real if "npm" in path else None
+
+        monkeypatch.setattr("mhd_pos_benchmark.doctor.shutil.which", fake_which)
+        monkeypatch.setenv("PATH", r"C:\Users\x\AppData\Roaming\npm")
+        assert resolve_real_executable("copilot") == real
+
+    def test_returns_none_when_only_a_shim_exists(self, monkeypatch):
+        from mhd_pos_benchmark.doctor import resolve_real_executable
+
+        shim = r"C:\Users\x\AppData\Roaming\Code\User\globalStorage\copilot.CMD"
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.doctor.shutil.which",
+            lambda name, path=None: shim if path is None else None,
+        )
+        monkeypatch.setenv("PATH", r"C:\some\dir")
+        assert resolve_real_executable("copilot") is None
+
+    def test_npm_wrapper_is_unwrapped_to_node(self, monkeypatch, tmp_path):
+        """cmd.exe truncated the multi-line prompt to its first line."""
+        from mhd_pos_benchmark.adapters.generic_cli import _npm_shim_launcher
+
+        script = tmp_path / "node_modules" / "@github" / "copilot" / "npm-loader.js"
+        script.parent.mkdir(parents=True)
+        script.write_text("// entry", encoding="utf-8")
+        wrapper = tmp_path / "copilot.CMD"
+        wrapper.write_text(
+            '"%_prog%" "%dp0%\\node_modules\\@github\\copilot\\npm-loader.js" %*\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.shutil.which",
+            lambda name, path=None: "/usr/bin/node",
+        )
+        launcher = _npm_shim_launcher(str(wrapper))
+        assert launcher is not None
+        assert launcher[0] == "/usr/bin/node"
+        assert launcher[1].endswith("npm-loader.js")
+
+    def test_non_wrapper_is_left_alone(self, tmp_path):
+        from mhd_pos_benchmark.adapters.generic_cli import _npm_shim_launcher
+
+        assert _npm_shim_launcher(r"C:\Users\x\.local\bin\claude.EXE") is None
+
+    def test_stdin_presets_keep_the_wrapper(self, monkeypatch, tmp_path):
+        """Only argument delivery hits the cmd.exe quoting problem."""
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.shutil.which",
+            lambda name, path=None: r"C:\npm\codex.CMD",
+        )
+        from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
+
+        adapter = GenericCliAdapter(preset="codex", cache_dir=tmp_path)
+        cmd, stdin = adapter._build_command("Tag each word.")
+        assert cmd[0] == r"C:\npm\codex.CMD"
+        assert stdin is not None
+
+
+class TestTimeout:
+    """A 1364-token chunk took 363 s in testing; a fixed 300 s would kill it."""
+
+    def test_timeout_scales_with_chunk_size(self, monkeypatch, tmp_path):
+        adapter = _make_adapter(monkeypatch, tmp_path, chunk_size=1364)
+        assert adapter._timeout >= 363
+
+    def test_small_chunks_keep_the_floor(self, monkeypatch, tmp_path):
+        adapter = _make_adapter(monkeypatch, tmp_path, chunk_size=200)
+        assert adapter._timeout == 300
+
+    def test_explicit_timeout_wins(self, monkeypatch, tmp_path):
+        adapter = _make_adapter(monkeypatch, tmp_path, chunk_size=1364, timeout=60)
+        assert adapter._timeout == 60
+
+
+class TestPresetCommands:
+    def test_claude_preset_carries_both_isolation_flags(self):
+        """--tools and --strict-mcp-config only reduce the prompt together."""
+        from mhd_pos_benchmark.adapters.cli_presets import get_preset
+
+        preset = get_preset("claude")
+        assert "--tools" in preset.command
+        assert "--strict-mcp-config" in preset.command
+        assert preset.isolate_cwd
+
+    def test_model_with_spaces_stays_one_argument(self, monkeypatch, tmp_path):
+        """Antigravity model names look like 'Gemini 3.1 Pro (High)'."""
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.shutil.which", lambda _: "/usr/bin/agy"
+        )
+        from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
+
+        adapter = GenericCliAdapter(
+            preset="antigravity", model="Gemini 3.1 Pro (High)", cache_dir=tmp_path,
+        )
+        cmd, _ = adapter._build_command("Tag each word.")
+        assert "Gemini 3.1 Pro (High)" in cmd
+
+    def test_empty_tools_flag_survives_parsing(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.shutil.which", lambda _: "/usr/bin/claude"
+        )
+        from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
+
+        adapter = GenericCliAdapter(preset="claude", cache_dir=tmp_path)
+        cmd, _ = adapter._build_command("Tag each word.")
+        assert cmd[cmd.index("--tools") + 1] == ""
+
+    def test_unknown_preset_lists_available(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.adapters.generic_cli.shutil.which", lambda _: "/usr/bin/x"
+        )
+        from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
+
+        with pytest.raises(ValueError, match="antigravity"):
+            GenericCliAdapter(preset="nope", cache_dir=tmp_path)
 
 
 class TestGenericCliCli:

@@ -33,7 +33,7 @@ The MHDBDB TEI repository (`../mhdbdb-tei-only/`) contains ~670 TEI-encoded MHG 
 
 ```bash
 pip install -e ".[dev]"
-pytest                          # 101 tests
+pytest                          # 176 tests
 
 # Corpus
 mhd-bench parse ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ --stats
@@ -41,14 +41,54 @@ mhd-bench mapping --validate --corpus-dir ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora
 
 # Evaluate
 mhd-bench evaluate corpus/ --adapter passthrough --subset 3
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6 --subset 3
-mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key --subset 3
+mhd-bench evaluate corpus/ --adapter cli --preset claude --model claude-opus-5 --subset 3
+mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-3.1-pro-preview --api-key --subset 3
+
+# Reproducible run: name the documents instead of sampling them
+mhd-bench evaluate corpus/ --adapter cli --preset claude --model claude-opus-5 \
+  --documents M033,M174,M040
 
 # Compare (baselines or cached results)
 mhd-bench compare corpus/ --adapters passthrough,majority --subset 3
 ```
 
 Adapters: `passthrough`, `majority`, `api` (any OpenAI-compatible API), `cli` (any CLI tool)
+CLI presets: `claude`, `antigravity`, `gemini`, `codex`, `copilot`
+
+## Harness Reality (verified 2026-08-18)
+
+- **Use `--preset`, not `--cli-cmd`.** Presets carry `--tools "" --strict-mcp-config`
+  and run the tool in an empty temp directory. Without both, a `claude -p` call
+  started in this repo reads CLAUDE.md and answers questions about the benchmark's
+  own ground truth, and each chunk costs 25.782 instead of 1.814 input tokens.
+- **Pin model versions.** Aliases (`opus`, `sonnet`) name the cache directory and
+  the published number, but point at a different model every few months.
+- **Pin documents with `--documents` for anything published.** `--subset` re-samples
+  when the corpus or sampling code changes; that already detached the March Gemini
+  cache from what `--subset 8` returns today. Every `--subset` run prints the
+  equivalent `--documents` line, saved JSON carries `document_ids`, and `compare`
+  warns when models were scored on different texts.
+- **Gemini CLI is consumer-dead** since 2026-06-18 (`IneligibleTierError`).
+  Use `--adapter api --provider gemini`, or the `antigravity` preset.
+- **Four subscription paths verified end to end (2026-08-18), no API key needed:**
+  `--preset claude --model claude-opus-5`, `--preset codex --model gpt-5.6-sol`,
+  `--preset antigravity --model gemini-3.1-pro-high`,
+  `--preset copilot --model claude-sonnet-4.6`.
+- **Never guess a model ID: read it from the tool.** Each CLI has its own naming,
+  none of them the API IDs. Sources: `agy models`, `~/.codex/models_cache.json`,
+  and for Copilot a probe sweep (it validates `--model` only at session start).
+  Full lists in [ARCHITECTURE.md](docs/ARCHITECTURE.md), read 2026-08-18.
+- **Never benchmark Copilot with `--model auto`.** It picks the model itself
+  (chose Claude Haiku 4.5 when tested).
+- The same model is reachable by several routes: Claude Sonnet 4.6 via Copilot
+  and Antigravity, Gemini 3.1 Pro Preview via Copilot and the Gemini API. If
+  scores differ by route, we are measuring the harness, so record the route.
+- `claude --bare` isolates best but never reads OAuth, so it requires an
+  `ANTHROPIC_API_KEY`.
+- **Chunk size is a confounder, not a knob.** Measured on M021: 0.8981 at chunk 200
+  vs 0.9135 in a single 1364-token call. Only compare models at the same
+  `--chunk-size`; the cache config hash separates runs and `compare` warns on
+  mixed configs. Bigger chunks are also not cheaper (more reasoning output).
 
 ## Hard Constraints
 

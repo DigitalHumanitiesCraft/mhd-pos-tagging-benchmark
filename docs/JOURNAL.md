@@ -394,3 +394,343 @@ A=attributiv, S=substituierend, D=adverbial, N=nominalisiert. Katharina consulte
 4. Verify RESEARCH.md citations
 
 **Git:** `548392c` on main, pushed to origin.
+
+## 2026-08-18 — Functional test + adaptation to the current model and harness reality
+
+Five months after the last session (last entry 2026-03-19). Everything was tested against the tools as
+they exist today, then adapted.
+
+### What still worked
+
+130 tests green, corpus parsing (406 documents), tagset validation, passthrough
+evaluation (accuracy 1.0000), `doctor`, and the Claude CLI adapter end to end
+(4,7 s for a 10-token probe, plausible tags).
+
+### What had broken
+
+| Finding | Evidence |
+|---|---|
+| Gemini CLI dead for consumer accounts | `IneligibleTierError: no longer supported for Gemini Code Assist for individuals`, retired 2026-06-18, successor is Antigravity CLI (`agy`) |
+| Tagger read the benchmark's own docs | `claude -p` started in the repo answered "ReM v2.1, HiTS 73 tags, MHDBDB 19/16" when asked what the project uses, despite `--system-prompt` |
+| 25.782 input tokens of harness overhead per chunk | ~1,6 million tokens per document at `chunk_size=200`, versus 1.814 per chunk when isolated |
+| `doctor` suggested a command that crashes | `compare --models a,b` on caches with no shared documents aborts with a traceback |
+| Copilot reported as installed | `shutil.which` found the VS Code extension's `copilot.ps1`, which blocks on an interactive install prompt |
+| Every model ID outdated | `opus`, `claude-opus-4.6`, `gemini-2.5-pro`, `gpt-4o`, `devstral`, `llama-3.3-70b-versatile` |
+
+### Measurements behind the isolation fix
+
+Probe question the model can only answer from project files, neutral working
+directory, Claude Code 2.1.234:
+
+| Invocation | Input tokens | Answer |
+|---|---|---|
+| as shipped before | 25.782 | describes the project |
+| `--tools ""` alone | 31.589 | NO-CONTEXT |
+| `--strict-mcp-config` alone | 24.732 | NO-CONTEXT |
+| both together | 1.814 | NO-CONTEXT |
+
+MCP server definitions and skills dominate the prompt; the two flags only work
+in combination. `--bare` would be the cleanest switch but never reads OAuth
+credentials ("Not logged in"), so it is unusable on a subscription login.
+
+Verified after the change, through the shipped preset: 2.602 input tokens,
+answer `NO-CONTEXT`, empty working directory.
+
+### Changes
+
+- Presets carry `--tools "" --strict-mcp-config --disable-slash-commands` and a
+  new `isolate_cwd` flag; the adapter runs the subprocess in an empty temp dir
+- Model IDs pinned and dated: `claude-opus-5`, `gemini-3.1-pro-preview`,
+  `gpt-5.6`, `gpt-5.2-codex`, `mistral-large-latest`, `openai/gpt-oss-120b`
+- New `antigravity` preset (`agy -p`), unverified, carries a caveat
+- Presets that could not be exercised locally carry a `caveat` field that
+  `evaluate` prints before the run: antigravity, codex, copilot, and gemini
+  (for the tier retirement)
+- `doctor` detects editor shims, and only suggests `compare` for caches that
+  actually share documents
+- Model substitution happens after argument splitting, so names with spaces
+  ("Gemini 3.1 Pro (High)") survive
+- 144 tests, all passing
+
+### Corrections to earlier entries
+
+The 2026-03-19 entry (First benchmark result) claims `claude -p` cannot run from inside Claude Code
+because of a shared rate limit. That no longer holds: every CLI test this
+session ran from inside Claude Code without hitting a limit.
+
+### Open issues
+
+- Subset selection and cache have drifted apart: `--subset 8` picks M106, M351,
+  M408, while the Gemini cache holds M255, M114, M121S. There is no way to name
+  documents explicitly, so cached results become unreachable once selection
+  shifts. A `--documents M033,M174,...` flag would fix this and make published
+  runs reproducible. Not implemented, needs a decision.
+- `chunk_size=200` dates from an era of smaller context windows. With current
+  models a larger chunk would cut the per-call overhead further.
+- antigravity, codex and copilot presets are unverified.
+- Claude comparison against Gemini 3.1 still missing.
+
+## 2026-08-18 — Pinned document selection + chunk size measured
+
+Follow-up to the same session: both open issues from the entry above were taken
+on.
+
+### Explicit document selection
+
+`--documents M033,M174,...` selects exactly the named texts, for `evaluate` and
+`compare`. Unknown IDs abort the run with a list of what was missing and
+near-miss suggestions; skipping them silently would change what a published
+number covers.
+
+Three supporting mechanisms, because naming documents only helps if people
+notice they should:
+
+- every `--subset` run now prints the `--documents` line that repeats it exactly
+- saved JSON results carry `document_ids`
+- `compare` warns when models were scored on different documents and prints the
+  `--documents` line for the shared set (`coverage_mismatch`)
+
+The March Gemini cache is reachable again: `compare --models
+gemini-3.1-pro-preview --documents M033,M174,M040,M255,M226,M021,M114,M121S`
+reproduces 90,08 % over all 8 documents and 7.531 tokens, the exact figure from
+the 2026-03-19 entry. Through `--subset 8` only 5 of those documents were still
+reachable.
+
+### Chunk size: measured, default kept
+
+M021 (1.364 tokens), Claude Opus 5, retries disabled:
+
+| chunk | calls | seconds | accuracy |
+|---|---|---|---|
+| 200 | 7 | 385,8 | 0,8981 |
+| 500 | 3 | 365,1 | 0,8930 |
+| 1364 (whole document) | 1 | 363,3 | 0,9135 |
+
+M174 (423 tokens) showed the same direction: 0,9078 at chunk 200 versus 0,9125
+in a single call.
+
+Token usage per call, same model: chunk 200 costs 4.582 in / 3.505 out, chunk
+500 costs 6.306 in / 10.649 out.
+
+What this changes:
+
+1. **Chunk size is a confounder, not a performance knob.** 1,5 accuracy points
+   between the extremes. Models are only comparable at the same chunk size.
+   The cache config hash already separates runs; `compare` now warns when
+   cached results carry different hashes, which it previously accepted silently
+   (`CachedAdapter` loads without hash filtering by design).
+2. **Bigger chunks are not cheaper.** They save harness overhead on input but
+   provoke much more reasoning on output, and output is the expensive half.
+   Over the 8-document set at Opus 5 rates: $4,64 at chunk 200 against $5,36 at
+   chunk 500. The premise behind the open issue was wrong.
+3. **Wall-clock is flat**, so there is no speed argument either.
+
+The default stays at 200, which also keeps the existing Gemini cache valid.
+`--chunk-size` is now exposed on `evaluate` and `compare` for anyone who wants
+to trade cost for the accuracy that longer context buys.
+
+Side effect: per-call time scales with chunk size, so the CLI adapter's timeout
+now does too (`max(300, chunk_size * 0.8)`). At chunk 1364 a call took 363 s,
+which the previous fixed 300 s would have killed on every attempt.
+
+### State
+
+170 tests, all passing. ruff clean.
+
+### Open issues
+
+- antigravity, codex and copilot presets remain unverified (tools not installed).
+- Claude has not yet been run over the 8 cached Gemini documents, so the
+  head-to-head is still missing. The command is now unambiguous:
+  `mhd-bench evaluate --adapter cli --preset claude --model claude-opus-5
+  --documents M033,M174,M040,M255,M226,M021,M114,M121S`
+- Whether the accuracy gain from whole-document chunks holds across models is
+  untested. If it does, it is a finding for the paper rather than a setting.
+
+## 2026-08-18 — Subscription access for GPT and Gemini
+
+Question that started this: can GPT and Gemini be benchmarked through existing
+subscriptions rather than API keys? For the project that matters beyond cost,
+because colleagues without an API budget should be able to reproduce a run.
+
+Answer: yes for both, through different tools than before.
+
+### What was installed and what it needs
+
+| Tool | Version | Auth | State |
+|---|---|---|---|
+| Codex CLI | 0.147.0 | ChatGPT plan login | flags verified, login expired |
+| Copilot CLI | 1.0.80 | GitHub Copilot subscription | works end to end |
+| Antigravity CLI (`agy`) | 1.1.14 | Google account | installed, login pending |
+
+`~/.codex/auth.json` already held a ChatGPT login (`auth_mode: chatgpt`, no API
+key) from 7 April, and `codex login status` reported "Logged in using ChatGPT".
+The refresh token turned out to be spent (`refresh_token_reused`), so a fresh
+`codex login` is needed. `agy` needs an interactive sign-in as well. Both are
+browser flows, so they cannot be done from inside a session.
+
+### Three findings from making the presets actually run
+
+**Codex refuses an untrusted directory.** `isolate_cwd` runs every call in an
+empty temp dir, which codex rejects with "Not inside a trusted directory".
+`--skip-git-repo-check` fixes it. The isolation and the tool's own safety check
+collide, and nothing about that is obvious from either side.
+
+**npm wrappers on Windows truncate long prompts.** Through `copilot.CMD` the
+Copilot CLI received only the first line of the tagging prompt and answered with
+an echo of it; exit code 0, no error, unusable output. The identical call
+through `node npm-loader.js` returned correct tags. cmd.exe mangles a long
+multi-line argument passed through a batch wrapper. The adapter now unwraps
+`.CMD`/`.BAT` launchers to a direct node call, but only where the prompt goes in
+as an argument. This is the kind of failure that would have been read as "the
+model can't do it".
+
+**Copilot's `auto` picks the model itself.** It chose Claude Haiku 4.5. A run
+labelled "Copilot" would have measured whatever Copilot felt like that day.
+Available on this subscription: `claude-sonnet-4.5`, `claude-haiku-4.5`. GPT
+names were rejected as unavailable, so GPT goes through codex, not copilot.
+
+Smoke test through the preset: copilot with `claude-sonnet-4.5` tagged the
+10-token probe correctly in 13,2 s.
+
+### Also
+
+`resolve_real_executable` now lives in `doctor.py` and is used by both `doctor`
+and the CLI adapter, so neither can end up measuring the VS Code Copilot shim
+that shadows the real CLI on PATH. `doctor` now reports all five CLIs as
+available.
+
+176 tests, all passing.
+
+### Open
+
+- `codex login` and `agy` sign-in, both interactive.
+- Once those are done, the head-to-head can cover Claude, GPT and Gemini on the
+  8 cached documents at zero marginal cost, all on subscriptions.
+
+## 2026-08-18 — Correction: the model lists were guessed, so they were wrong
+
+Both logins are in place, and that exposed a methodological error in the entry
+above. The available models had been established by trying a handful of names
+that seemed plausible and recording which ones failed. Two of the resulting
+statements were false.
+
+The trigger was Codex's own interface: it offered `gpt-5.6-terra` and
+`gpt-5.6-sol`, while the entry above claims only `gpt-5.4` is available. The
+earlier probe had tested `gpt-5.6`, `gpt-5.6-codex`, `gpt-5.4-codex` and
+`gpt-5.2-codex`, all of which really are rejected, and concluded from four
+misses that the family was unavailable. The tested names simply were not the
+names the tool uses.
+
+### Where the model lists actually come from
+
+| Tool | Authoritative source |
+|---|---|
+| Antigravity | `agy models`, live from the account |
+| Codex | `~/.codex/models_cache.json`, refreshed by the CLI from the account |
+| Copilot | no listing command outside the TUI, so probe name by name |
+| Claude | `--model` takes an alias (`opus`, `sonnet`, `fable`) or a full ID |
+
+Codex on this ChatGPT plan (cache stamped 2026-08-18, client 0.147.0), in the
+tool's own priority order: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`,
+`gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`. Sol, Terra and Luna
+share a 272k context (872k maximum) and differ in default reasoning level, which
+is a setting rather than part of the ID.
+
+Copilot, probed one name at a time (an invalid name fails in about 3 s on the
+flag check, a valid one runs the prompt, so a sweep is cheap): available are
+`claude-sonnet-4.6`, `claude-sonnet-4.5`, `claude-haiku-4.5`, `gpt-5.4`,
+`gpt-5.3-codex`, `gpt-5-mini`, `gemini-3.1-pro-preview`, `gemini-3.5-flash`.
+Rejected: every `claude-opus` spelling, `gpt-5.6`, `gpt-5.5`, `gpt-4.1`,
+`gemini-3-pro`, `gemini-3.1-pro`. So the claim "Copilot has Claude but no GPT"
+was wrong in both directions: GPT-5.4 is there, Opus is not.
+
+Antigravity, from `agy models`: `gemini-3.7-flash-{high,medium,low}`,
+`gemini-3.6-flash-{high,medium,low}`, `gemini-3.5-flash-{high,medium,low}`,
+`gemini-3.1-pro-{high,low}`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`,
+`gpt-oss-120b-medium`. Pro ships high and low but no medium.
+
+### Consequences
+
+Preset defaults are now `gpt-5.6-sol` for codex and `claude-sonnet-4.6` for
+copilot, replacing `gpt-5.4` and the unreproducible `auto`. Both were smoke
+tested through the adapter on the 10-token probe and returned the expected tags:
+codex in 5,7 s, copilot in 7,5 s.
+
+Two things worth carrying into the paper:
+
+- `gemini-3.1-pro-preview` is reachable through Copilot, which is the same model
+  name as the March API run at 90,08 %. That is a free replication of an
+  API-priced result, and a direct test of whether the harness moves the number.
+- Claude Sonnet 4.6 is reachable through Copilot and through Antigravity. Same
+  model, two harnesses: if the scores differ, the benchmark is measuring the
+  harness, so the route belongs in the results table beside the model name.
+
+The general lesson is cheap to state and was expensive to learn: a model name
+that fails proves nothing about a model that exists. Read the list from the
+tool, and re-read it before a publication run.
+
+## 2026-08-18 — handoff
+
+**Summary:** Five months of drift caught up with in one session. The benchmark
+was tested against the tools as they exist today, then adapted: harness
+isolation for the CLI presets, pinned document selection, chunk size measured as
+a confounder, four subscription paths for Claude, GPT and Gemini verified end to
+end, and the model IDs for every CLI read from the tools themselves after a
+first round of guessed names produced two false findings. 176 tests green, ruff
+clean, nothing benchmarked beyond 10-token probes.
+
+**Phase:** Implementation. Infrastructure is ready for the head-to-head; no
+comparative numbers were produced today.
+
+### What changed
+
+- **Harness isolation.** Presets carry `--tools "" --strict-mcp-config
+  --disable-slash-commands` and run in an empty temp directory. Without both
+  flags a `claude -p` call started in this repo read CLAUDE.md and could answer
+  questions about the benchmark's own ground truth, at 25.782 instead of 1.814
+  input tokens per chunk. Contamination and a factor of 14 in cost, both gone.
+- **`--documents M033,M174,...`** for `evaluate` and `compare`, plus the
+  supporting machinery: `--subset` prints the equivalent pinned line, saved JSON
+  carries `document_ids`, `compare` warns when models were scored on different
+  texts, and `doctor` only suggests comparisons over documents the caches share.
+- **`--chunk-size`** exposed, and measured on M021: 0,8981 at chunk 200 against
+  0,9135 in a single 1364-token call. Chunk size is a confounder, not a knob,
+  and bigger chunks are not cheaper either (more reasoning output).
+- **Four subscription routes verified**, no API key needed: `claude` with
+  `claude-opus-5`, `codex` with `gpt-5.6-sol`, `antigravity` with
+  `gemini-3.1-pro-high`, `copilot` with `claude-sonnet-4.6`. All four returned
+  identical correct tags on the 10-token probe.
+- **Model IDs read from the tools**, not guessed. Full per-tool lists and their
+  sources are in ARCHITECTURE.md and in the correction entry above.
+- **Two silent-failure fixes:** npm `.CMD` wrappers on Windows truncate a long
+  multi-line prompt argument, so the adapter unwraps them to a direct node call;
+  and the VS Code Copilot shim that shadows the real CLI on PATH is now skipped
+  by `resolve_real_executable`.
+
+### Open issues
+
+- **No head-to-head yet.** The March Gemini result (90,08 % over 8 documents) is
+  still the only real number. Claude covers 1 of those 8 documents. The run is
+  prepared and costs nothing beyond quota:
+  `mhd-bench evaluate corpus/ --adapter cli --preset <p> --model <m>
+  --documents M033,M174,M040,M255,M226,M021,M114,M121S`
+- **Route as a variable.** Claude Sonnet 4.6 is reachable via Copilot and via
+  Antigravity, Gemini 3.1 Pro Preview via Copilot and via the Gemini API. Worth
+  one deliberate comparison before publishing, because a difference there is the
+  harness, not the model.
+- **Chunk size across models** is untested. If the whole-document gain holds for
+  every model, it is a finding for the paper rather than a setting.
+- Gemini CLI stays consumer-dead since 2026-06-18 (`IneligibleTierError`).
+- Older items unchanged: KO* still excluded, inter-annotator consistency in ReM
+  unchecked, RESEARCH.md citations unverified, edition matching deferred to
+  Michael's HiWi.
+
+### Next steps
+
+1. Run the four subscription models on the 8 pinned documents, same
+   `--chunk-size`, and record the route beside each model name.
+2. Compare, and check whether the Gemini API number replicates through Copilot.
+3. Only then touch the paper table.
+
+**Git:** committed and pushed to main on 2026-08-18.

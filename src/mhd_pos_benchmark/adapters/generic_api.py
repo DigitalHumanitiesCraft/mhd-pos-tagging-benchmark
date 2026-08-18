@@ -1,13 +1,17 @@
 """Generic API adapter — POS tagging via any OpenAI-compatible LLM API.
 
 Works with any provider that offers an OpenAI-compatible chat completions endpoint:
-  - OpenAI:  gpt-4o, o3, ...
-  - Gemini:  gemini-2.5-pro, gemini-2.5-flash, ...
-  - Mistral: devstral, mistral-large, ...
-  - Groq:    llama3, mixtral, ...
+  - OpenAI:  gpt-5.6, gpt-5.6-terra, gpt-5.6-luna, ...
+  - Gemini:  gemini-3.1-pro-preview, gemini-3.7-flash, ...
+  - Mistral: mistral-large-latest, ...
+  - Groq:    openai/gpt-oss-120b, ...
   - Local:   ollama, vLLM, llama.cpp, ...
 
 One SDK (openai), one adapter. Just needs --provider, --model, --api-key.
+
+Model IDs move fast. The defaults below were verified on 2026-08-18; pass
+--model explicitly for anything you intend to publish, so the result is tied
+to a named model version rather than to whatever a default pointed at.
 """
 
 from __future__ import annotations
@@ -35,12 +39,12 @@ PROVIDERS: dict[str, dict[str, str]] = {
     "openai": {
         "base_url": "https://api.openai.com/v1",
         "env_var": "OPENAI_API_KEY",
-        "default_model": "gpt-4o",
+        "default_model": "gpt-5.6",
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "env_var": "GEMINI_API_KEY",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.1-pro-preview",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1",
@@ -49,8 +53,9 @@ PROVIDERS: dict[str, dict[str, str]] = {
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
+        # llama-3.3-70b-versatile was deprecated on 2026-06-17
         "env_var": "GROQ_API_KEY",
-        "default_model": "llama-3.3-70b-versatile",
+        "default_model": "openai/gpt-oss-120b",
     },
 }
 
@@ -62,9 +67,9 @@ class GenericApiAdapter(ModelAdapter):
     base URLs and env var names; --api-base overrides for custom endpoints.
 
     Examples:
-        GenericApiAdapter(provider="openai", model="gpt-4o", api_key="sk-...")
-        GenericApiAdapter(provider="gemini", model="gemini-2.5-pro", api_key="AI...")
-        GenericApiAdapter(provider="mistral", model="devstral", api_key="...")
+        GenericApiAdapter(provider="openai", model="gpt-5.6", api_key="sk-...")
+        GenericApiAdapter(provider="gemini", model="gemini-3.1-pro-preview", api_key="AI...")
+        GenericApiAdapter(provider="mistral", model="mistral-large-latest", api_key="...")
         GenericApiAdapter(api_base="http://localhost:11434/v1", model="llama3")
     """
 
@@ -82,7 +87,7 @@ class GenericApiAdapter(ModelAdapter):
         # Resolve provider config
         provider_config = PROVIDERS.get(provider, {})
         self._base_url = api_base or provider_config.get("base_url", "https://api.openai.com/v1")
-        self._model = model or provider_config.get("default_model", "gpt-4o")
+        self._model = model or provider_config.get("default_model", "gpt-5.6")
 
         # Resolve API key: explicit > env var > error
         env_var = provider_config.get("env_var", "OPENAI_API_KEY")

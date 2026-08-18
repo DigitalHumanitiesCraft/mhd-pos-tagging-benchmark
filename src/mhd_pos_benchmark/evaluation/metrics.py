@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sklearn.metrics import (
     accuracy_score,
@@ -40,6 +40,8 @@ class EvaluationResult:
     evaluated_tokens: int
     excluded_tokens: int
     documents_evaluated: int
+    # IDs actually scored, so a saved result says what it covers
+    document_ids: list[str] = field(default_factory=list)
 
     @property
     def exclusion_rate(self) -> float:
@@ -95,4 +97,5 @@ def compute_metrics(
         evaluated_tokens=len(gold_tags),
         excluded_tokens=excluded_tokens,
         documents_evaluated=sum(1 for r in results if r.pairs),
+        document_ids=[r.document_id for r in results if r.pairs],
     )

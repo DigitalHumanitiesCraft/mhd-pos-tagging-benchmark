@@ -65,6 +65,9 @@ def save_json(result: EvaluationResult, path: Path) -> None:
             "exclusion_rate": result.exclusion_rate,
             "documents_evaluated": result.documents_evaluated,
         },
+        # The exact selection, so the run can be repeated with
+        # --documents rather than relying on --subset sampling
+        "document_ids": result.document_ids,
         "per_tag": [
             {
                 "tag": tm.tag,

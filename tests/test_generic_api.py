@@ -94,20 +94,21 @@ def test_name_uses_model(tmp_path):
 
 
 def test_name_default_model(tmp_path):
-    from mhd_pos_benchmark.adapters.generic_api import GenericApiAdapter
+    # Asserted against PROVIDERS, not a literal: model IDs are updated as
+    # providers release new versions, and the test should not need editing then.
+    from mhd_pos_benchmark.adapters.generic_api import PROVIDERS, GenericApiAdapter
 
     adapter = GenericApiAdapter(api_key="test-key", cache_dir=tmp_path)
-    # Default provider is openai, default model is gpt-4o
-    assert adapter.name == "gpt-4o"
+    assert adapter.name == PROVIDERS["openai"]["default_model"]
 
 
 def test_provider_gemini_default_model(tmp_path):
-    from mhd_pos_benchmark.adapters.generic_api import GenericApiAdapter
+    from mhd_pos_benchmark.adapters.generic_api import PROVIDERS, GenericApiAdapter
 
     adapter = GenericApiAdapter(
         api_key="test-key", provider="gemini", cache_dir=tmp_path,
     )
-    assert adapter.name == "gemini-2.5-flash"
+    assert adapter.name == PROVIDERS["gemini"]["default_model"]
 
 
 def test_predict_basic(tmp_path):

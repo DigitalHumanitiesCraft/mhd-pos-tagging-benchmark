@@ -12,7 +12,7 @@ from rich.table import Table
 console = Console()
 
 ADAPTER_CHOICES = ["passthrough", "majority", "api", "cli"]
-CLI_PRESETS = ["claude", "gemini", "codex", "copilot"]
+CLI_PRESETS = ["claude", "antigravity", "gemini", "codex", "copilot"]
 
 
 def _resolve_corpus_dir(corpus_dir: Path | None) -> Path:
@@ -37,10 +37,21 @@ def _resolve_corpus_dir(corpus_dir: Path | None) -> Path:
     )
 
 
-def _parse_and_map(corpus_dir: Path, subset: int | None = None):
-    """Shared helper: parse corpus, map tags, optionally select subset."""
+def _parse_and_map(
+    corpus_dir: Path,
+    subset: int | None = None,
+    documents_arg: str | None = None,
+):
+    """Shared helper: parse corpus, map tags, optionally narrow the document set."""
     from mhd_pos_benchmark.data.rem_parser import parse_corpus
     from mhd_pos_benchmark.mapping.tagset_mapper import TagsetMapper
+
+    if subset is not None and documents_arg:
+        raise click.UsageError(
+            "--subset and --documents are mutually exclusive.\n"
+            "  --subset N     samples N documents (exploration)\n"
+            "  --documents ID,ID  names them exactly (reproducible runs)"
+        )
 
     console.print(f"Parsing corpus from {corpus_dir}...")
     documents = parse_corpus(corpus_dir)
@@ -50,7 +61,24 @@ def _parse_and_map(corpus_dir: Path, subset: int | None = None):
     for doc in documents:
         mapper.map_document(doc)
 
-    if subset is not None:
+    if documents_arg:
+        from mhd_pos_benchmark.data.subset import (
+            describe_subset,
+            parse_document_ids,
+            select_by_ids,
+        )
+
+        ids = parse_document_ids(documents_arg)
+        if not ids:
+            raise click.UsageError("--documents was empty")
+        try:
+            documents = select_by_ids(documents, ids)
+        except ValueError as e:
+            raise click.UsageError(str(e)) from e
+        console.print("\n[bold]Documents selected:[/bold]")
+        console.print(describe_subset(documents))
+
+    elif subset is not None:
         from mhd_pos_benchmark.data.subset import describe_subset, select_subset
 
         documents = select_subset(documents, n=subset)
@@ -61,6 +89,10 @@ def _parse_and_map(corpus_dir: Path, subset: int | None = None):
                 f"got {len(documents)} (genre-stratified sampling)[/yellow]"
             )
         console.print(describe_subset(documents))
+        console.print(
+            "[dim]For a run you intend to publish, pin the selection:[/dim]\n"
+            f"[dim]  --documents {','.join(d.id for d in documents)}[/dim]"
+        )
 
     return documents
 
@@ -81,8 +113,11 @@ def _make_adapter(
     provider: str | None = None,
     api_base: str | None = None,
     preset: str | None = None,
+    chunk_size: int | None = None,
 ):
     """Instantiate an adapter by name."""
+    # Only pass chunk_size when set, so adapter defaults stay in one place
+    chunk_kwargs = {} if chunk_size is None else {"chunk_size": chunk_size}
     if name == "passthrough":
         from mhd_pos_benchmark.adapters.gold_passthrough import GoldPassthroughAdapter
 
@@ -98,43 +133,52 @@ def _make_adapter(
 
         effective_provider = provider or "openai"
         if model is None:
-            default_model = PROVIDERS.get(effective_provider, {}).get("default_model", "gpt-4o")
+            default_model = PROVIDERS.get(effective_provider, {}).get("default_model", "gpt-5.6")
             console.print(f"No --model specified, using default: [bold]{default_model}[/bold]")
         return GenericApiAdapter(
             provider=effective_provider,
             model=model,
             api_key=api_key,
             api_base=api_base,
+            **chunk_kwargs,
         )
     elif name == "cli":
         from mhd_pos_benchmark.adapters.generic_cli import GenericCliAdapter
 
         if preset:
+            from mhd_pos_benchmark.adapters.cli_presets import get_preset
+
             console.print(f"Using CLI preset: [bold]{preset}[/bold]")
-            return GenericCliAdapter(preset=preset, model=model, model_name=model)
+            preset_config = get_preset(preset)
+            if preset_config is not None and preset_config.caveat:
+                console.print(f"[yellow]Note: {preset_config.caveat}[/yellow]")
+            return GenericCliAdapter(
+                preset=preset, model=model, model_name=model, **chunk_kwargs,
+            )
         elif cli_cmd:
-            return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model)
+            return GenericCliAdapter(cli_cmd=cli_cmd, model_name=model, **chunk_kwargs)
         else:
             raise click.UsageError(
                 "--adapter cli requires --preset or --cli-cmd.\n"
                 f"  Presets: {', '.join(CLI_PRESETS)}\n"
-                "  Example: --adapter cli --preset claude --model opus\n"
+                "  Example: --adapter cli --preset claude --model claude-opus-5\n"
                 "  Example: --adapter cli --cli-cmd \"my-tool --flag\""
             )
     else:
         # Smart suggestions for common mistakes
         suggestions = {
             "gemini": "--adapter api --provider gemini  or  --adapter cli --preset gemini",
+            "antigravity": "--adapter cli --preset antigravity",
             "openai": "--adapter api --provider openai",
             "mistral": "--adapter api --provider mistral",
             "groq": "--adapter api --provider groq",
             "claude": "--adapter cli --preset claude",
             "codex": "--adapter cli --preset codex",
             "copilot": "--adapter cli --preset copilot",
-            "gpt-4o": "--adapter api --provider openai --model gpt-4o",
+            "gpt-5.6": "--adapter api --provider openai --model gpt-5.6",
             "gpt": "--adapter api --provider openai",
-            "opus": "--adapter cli --preset claude --model opus",
-            "sonnet": "--adapter cli --preset claude --model sonnet",
+            "opus": "--adapter cli --preset claude --model claude-opus-5",
+            "sonnet": "--adapter cli --preset claude --model claude-sonnet-5",
             "llama": "--adapter api --api-base http://localhost:11434/v1 --model llama3",
         }
         hint = suggestions.get(name.lower(), "")
@@ -243,6 +287,22 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     help="Evaluate on N representative documents (for prototyping)",
 )
 @click.option(
+    "--documents",
+    "documents_arg",
+    type=str,
+    default=None,
+    help="Evaluate exactly these document IDs, e.g. 'M033,M174,M040'. "
+         "Use this instead of --subset for runs you intend to publish.",
+)
+@click.option(
+    "--chunk-size",
+    type=int,
+    default=None,
+    help="Tokens per model call (default 200). Larger chunks mean fewer calls "
+         "and less harness overhead, but every chunk must come back with exactly "
+         "as many tags as it had tokens. Changing this invalidates cached results.",
+)
+@click.option(
     "--output",
     type=click.Path(path_type=Path),
     default=None,
@@ -273,7 +333,7 @@ def mapping(corpus_dir: Path | None, validate: bool) -> None:
     "model_name",
     type=str,
     default=None,
-    help="Model name for display/caching (e.g. 'gpt-4o', 'gemini-2.5-pro').",
+    help="Model name for display/caching (e.g. 'claude-opus-5', 'gemini-3.1-pro-preview').",
 )
 @click.option(
     "--provider",
@@ -297,6 +357,8 @@ def evaluate(
     corpus_dir: Path | None,
     adapter: str,
     subset: int | None,
+    documents_arg: str | None,
+    chunk_size: int | None,
     output: Path | None,
     api_key: str | None,
     verbose: bool,
@@ -319,10 +381,10 @@ def evaluate(
 
     corpus_dir = _resolve_corpus_dir(corpus_dir)
     api_key = _resolve_api_key(api_key)
-    documents = _parse_and_map(corpus_dir, subset)
+    documents = _parse_and_map(corpus_dir, subset, documents_arg)
     model = _make_adapter(
         adapter, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
-        provider=provider, api_base=api_base, preset=preset,
+        provider=provider, api_base=api_base, preset=preset, chunk_size=chunk_size,
     )
 
     console.print(f"\nRunning evaluation with adapter: [bold]{model.name}[/bold]...")
@@ -354,13 +416,27 @@ def evaluate(
     "--models",
     type=str,
     default=None,
-    help="Comma-separated model names to compare from cache (e.g. 'claude-opus-4.6,gemini-2.5-pro').",
+    help="Comma-separated model names to compare from cache (e.g. 'claude-opus-5,gemini-3.1-pro-preview').",
 )
 @click.option(
     "--subset",
     type=int,
     default=None,
     help="Evaluate on N representative documents",
+)
+@click.option(
+    "--documents",
+    "documents_arg",
+    type=str,
+    default=None,
+    help="Compare on exactly these document IDs, e.g. 'M033,M174,M040'. "
+         "Use the IDs the cached runs actually cover (mhd-bench doctor lists them).",
+)
+@click.option(
+    "--chunk-size",
+    type=int,
+    default=None,
+    help="Tokens per model call for live adapters (default 200).",
 )
 @click.option(
     "--output",
@@ -418,6 +494,8 @@ def compare(
     adapters: str | None,
     models: str | None,
     subset: int | None,
+    documents_arg: str | None,
+    chunk_size: int | None,
     output: Path | None,
     api_key: str | None,
     verbose: bool,
@@ -434,7 +512,7 @@ def compare(
 
     \b
     1. --models: Compare cached results from previous evaluate runs (recommended).
-       mhd-bench compare corpus/ --models claude-opus-4.6,gemini-2.5-pro
+       mhd-bench compare corpus/ --models claude-opus-5,gemini-3.1-pro-preview
 
     \b
     2. --adapters: Run adapters live and compare (for baselines or single-config adapters).
@@ -446,7 +524,7 @@ def compare(
 
     from rich.progress import Progress
 
-    from mhd_pos_benchmark.evaluation.comparator import align_corpus
+    from mhd_pos_benchmark.evaluation.comparator import align_corpus, coverage_mismatch
     from mhd_pos_benchmark.evaluation.metrics import EvaluationResult, compute_metrics
     from mhd_pos_benchmark.evaluation.report import print_report
 
@@ -458,7 +536,7 @@ def compare(
 
     corpus_dir = _resolve_corpus_dir(corpus_dir)
     api_key = _resolve_api_key(api_key)
-    documents = _parse_and_map(corpus_dir, subset)
+    documents = _parse_and_map(corpus_dir, subset, documents_arg)
 
     results: list[EvaluationResult] = []
 
@@ -467,11 +545,13 @@ def compare(
         from mhd_pos_benchmark.adapters.cached import CachedAdapter
 
         model_names = [m.strip() for m in models.split(",")]
+        config_by_model: dict[str, set[str | None]] = {}
         for mname in model_names:
             try:
                 cached_adapter = CachedAdapter(mname)
             except FileNotFoundError as e:
                 raise click.UsageError(str(e)) from e
+            config_by_model[mname] = cached_adapter.config_hashes
             console.print(f"\nLoading cached results: [bold]{mname}[/bold]...")
             with Progress(console=console) as progress:
                 task = progress.add_task(f"Loading {mname}", total=len(documents))
@@ -491,6 +571,7 @@ def compare(
             model = _make_adapter(
                 name, documents, api_key=api_key, cli_cmd=cli_cmd, model=model_name,
                 provider=provider, api_base=api_base, preset=preset,
+                chunk_size=chunk_size,
             )
             console.print(f"\nRunning: [bold]{model.name}[/bold]...")
             with Progress(console=console) as progress:
@@ -503,6 +584,52 @@ def compare(
             result = compute_metrics(alignments, model.name)
             results.append(result)
             print_report(result, console)
+
+    # Cached runs carry the settings they were produced under. Chunk size alone
+    # shifted accuracy by 1.5 points in testing, so mixing configurations
+    # produces a table whose columns are not the same experiment.
+    if models:
+        distinct = {h for hashes in config_by_model.values() for h in hashes}
+        if len(distinct) > 1:
+            console.print(
+                "\n[yellow]Warning: these cached results were produced under "
+                "different settings (chunk size, prompt, or temperature). "
+                "The numbers are not a like-for-like comparison.[/yellow]"
+            )
+            for mname, hashes in config_by_model.items():
+                shown = ", ".join(sorted(h or "pre-hash" for h in hashes))
+                console.print(f"  [yellow]{mname}: config {shown}[/yellow]")
+            console.print(
+                "  [dim]Re-run the odd one out with the same --chunk-size, "
+                "or delete its cache directory to re-tag it.[/dim]"
+            )
+
+    mismatch = coverage_mismatch(
+        {r.adapter_name: set(r.document_ids) for r in results}
+    )
+    if mismatch is not None:
+        extras, shared = mismatch
+        console.print(
+            "\n[yellow]Warning: these models were not scored on the same "
+            "documents, so the numbers are not directly comparable.[/yellow]"
+        )
+        for r in results:
+            extra = extras.get(r.adapter_name, [])
+            console.print(
+                f"  [yellow]{r.adapter_name}: {len(r.document_ids)} documents"
+                + (f" (not shared: {', '.join(extra)})" if extra else "")
+                + "[/yellow]"
+            )
+        if shared:
+            console.print(
+                "  [dim]For a like-for-like comparison, re-run with:[/dim]\n"
+                f"  [dim]--documents {','.join(shared)}[/dim]"
+            )
+        else:
+            console.print(
+                "  [yellow]No shared documents at all: this table compares "
+                "nothing.[/yellow]"
+            )
 
     # Side-by-side summary
     console.print("\n[bold]Comparison Summary[/bold]\n")
@@ -541,6 +668,7 @@ def compare(
                     "macro_f1": r.macro_f1,
                     "micro_f1": r.micro_f1,
                     "evaluated_tokens": r.evaluated_tokens,
+                    "document_ids": r.document_ids,
                 }
                 for r in results
             ]
@@ -581,6 +709,14 @@ def doctor() -> None:
         for r in cli_results
     )
     console.print(f"\n{cli_line}")
+
+    # A detected editor shim looks like a missing tool in the compact line above,
+    # so spell out why it does not count as installed.
+    for r in cli_results:
+        if r.status == "warn" and "shim" in r.message:
+            console.print(f"    [yellow]{r.name}: {r.message}[/yellow]")
+            if r.fix_hint:
+                console.print(f"    [dim]{r.fix_hint}[/dim]")
 
     # API keys (compact)
     api_results = check_api_keys()

@@ -2,6 +2,15 @@
 
 Selects documents across genres and sizes for fast iteration
 before running expensive evaluations on the full corpus.
+
+Two selection modes:
+
+- `select_subset(documents, n)` — genre-stratified sample, deterministic for a
+  given corpus and n. Good for exploring, but the sample shifts when the corpus
+  or the allocation logic changes, which silently detaches earlier cached runs.
+- `select_by_ids(documents, ids)` — exactly the documents named. This is what
+  published runs should use: the document list becomes part of the method
+  description rather than an artefact of the sampling code.
 """
 
 from __future__ import annotations
@@ -75,6 +84,48 @@ def select_subset(
             len(selected), n,
         )
     return selected[:n]
+
+
+def parse_document_ids(raw: str) -> list[str]:
+    """Split a comma or whitespace separated document ID list, preserving order."""
+    ids = [part.strip() for part in raw.replace(",", " ").split()]
+    seen: set[str] = set()
+    unique: list[str] = []
+    for doc_id in ids:
+        if not doc_id or doc_id in seen:
+            continue
+        seen.add(doc_id)
+        unique.append(doc_id)
+    return unique
+
+
+def select_by_ids(documents: list[Document], ids: list[str]) -> list[Document]:
+    """Select exactly the documents named, in the order given.
+
+    Raises ValueError listing every unknown ID, with near-miss suggestions.
+    Being strict is the point: silently dropping an unknown ID would change
+    what a published number covers without saying so.
+    """
+    by_id = {doc.id: doc for doc in documents}
+    missing = [doc_id for doc_id in ids if doc_id not in by_id]
+
+    if missing:
+        hints = []
+        for doc_id in missing[:3]:
+            close = [
+                known for known in by_id
+                if known.upper().startswith(doc_id.upper()[:2])
+            ]
+            if close:
+                hints.append(f"{doc_id} (did you mean {', '.join(sorted(close)[:3])}?)")
+            else:
+                hints.append(doc_id)
+        raise ValueError(
+            f"{len(missing)} document ID(s) not in corpus: {', '.join(hints)}. "
+            f"Corpus has {len(by_id)} documents."
+        )
+
+    return [by_id[doc_id] for doc_id in ids]
 
 
 def describe_subset(documents: list[Document]) -> str:

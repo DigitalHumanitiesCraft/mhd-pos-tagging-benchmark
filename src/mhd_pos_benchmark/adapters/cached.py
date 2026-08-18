@@ -42,6 +42,16 @@ class CachedAdapter(ModelAdapter):
     def name(self) -> str:
         return self._model_name
 
+    @property
+    def config_hashes(self) -> set[str | None]:
+        """Config hashes present in this model's cache.
+
+        Exposed so `compare` can tell whether the models in one table were
+        produced under the same settings. Entries written before config hashing
+        contribute None.
+        """
+        return self._cache.loaded_config_hashes
+
     def predict(self, document: Document) -> list[str]:
         mappable = document.mappable_tokens
         cached = self._cache.get(document.id, expected_count=len(mappable))

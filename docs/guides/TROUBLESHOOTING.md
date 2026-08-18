@@ -93,25 +93,62 @@ For LLMs, use `--adapter api` or `--adapter cli` and specify the model name sepa
 mhd-bench evaluate corpus/ --adapter gemini
 
 # Correct (API):
-mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key
+mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-3.1-pro-preview --api-key
 
 # Correct (CLI):
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -p" --model gemini-2.5-pro
+mhd-bench evaluate corpus/ --adapter cli --preset gemini --model gemini-3.1-pro-preview
 ```
 
 The benchmark shows a hint with the correct command when you use a known model name as an adapter name.
 
-### `--adapter cli requires --cli-cmd`
+### `--adapter cli requires --preset or --cli-cmd`
 
 You chose `--adapter cli` but didn't specify which CLI tool to call.
 
 ```bash
-# The CLI adapter always needs --cli-cmd:
+# Preferred: a preset knows the tool's flags and isolation settings
 mhd-bench evaluate corpus/ \
   --adapter cli \
-  --cli-cmd "claude -p --model opus" \
-  --model claude-opus-4.6
+  --preset claude \
+  --model claude-opus-5
+
+# Fallback for tools without a preset
+mhd-bench evaluate corpus/ \
+  --adapter cli \
+  --cli-cmd "my-tagger --stdin" \
+  --model my-tagger-v1
 ```
+
+Presets: `claude`, `antigravity`, `gemini`, `codex`, `copilot`.
+
+### `IneligibleTierError` from Gemini CLI
+
+Google stopped serving consumer accounts through Gemini CLI on 18 June 2026. An
+OAuth login now fails with "This client is no longer supported for Gemini Code
+Assist for individuals".
+
+Three ways forward:
+
+```bash
+# 1. Use the Gemini API instead (needs a key from aistudio.google.com)
+mhd-bench evaluate corpus/ --adapter api --provider gemini \
+  --model gemini-3.1-pro-preview --api-key
+
+# 2. Use the successor CLI
+mhd-bench evaluate corpus/ --adapter cli --preset antigravity
+
+# 3. Keep Gemini CLI with a paid API key in GEMINI_API_KEY
+```
+
+### The model seems to know about this benchmark
+
+Coding CLIs read instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) from their
+working directory, which would let the tagger see the benchmark's own
+documentation. The presets prevent this by running the tool in an empty
+directory with tools and MCP servers switched off.
+
+If you built your own invocation with `--cli-cmd`, you do not get that
+protection. Either switch to a preset, or add the equivalent flags for your tool.
 
 ### `CLI tool 'claude' not found on PATH`
 
@@ -162,9 +199,11 @@ The LLM returned a different number of tags than there were tokens in the chunk.
 
 Possible fixes:
 
-- **Add `--continue-on-error`:** The benchmark skips the failed document and continues with the next. Results will cover fewer documents.
-- **Smaller subset:** Start with `--subset 1` to check whether the model works at all.
-- **Stronger model:** GPT-4o, Gemini 2.5 Pro, and Claude Opus follow the required output format more reliably.
+- **Smaller chunks:** `--chunk-size 100` gives the model less to keep aligned per call. This is the most direct fix, at the price of more calls.
+- **Stronger model:** Frontier models (Claude Opus 5, Gemini 3.1 Pro, GPT-5.6) hold the count reliably; smaller ones drift.
+- **Add `--continue-on-error`:** The benchmark skips the failed document and continues. Note that the run then covers fewer documents than the others it will be compared against, and `compare` will warn about it.
+
+Note that `--chunk-size` is part of the cache key, so changing it re-runs everything for that model.
 
 ### Evaluation runs but is extremely slow
 
@@ -182,13 +221,38 @@ The cache detects changes to prompt text, chunk size, and temperature automatica
 
 ```bash
 # Delete cache for one model:
-rm -rf results/claude-opus-4.6/
+rm -rf results/claude-opus-5/
 
 # Delete all caches:
 rm -rf results/
 ```
 
 The next run will re-tag all documents.
+
+### `Document M106 not found in cache for '<model>'`
+
+`compare --models` reads predictions that an earlier `evaluate` run stored. This
+error means the current document selection includes a text that run never saw.
+
+Usually the cause is that `--subset` sampled differently than it did back then:
+the sample depends on the corpus and on the sampling code, so it moves. Ask
+`mhd-bench doctor` which documents your caches share, and name them:
+
+```bash
+mhd-bench compare --models model-a,model-b --documents M033,M174,M040
+```
+
+Use `--documents` from the start for anything you plan to publish. Every
+`--subset` run prints the matching `--documents` line, and every saved JSON
+result lists the `document_ids` it covered.
+
+### `Warning: these models were not scored on the same documents`
+
+Two accuracy numbers side by side only mean something if they describe the same
+texts. This warning says they don't, usually after a run with
+`--continue-on-error`. The message lists which documents are not shared and
+prints the `--documents` line for the common set. Re-run with that line before
+reporting the numbers.
 
 ### `--subset 5` returns only 3 documents
 
@@ -210,7 +274,7 @@ Check the path within the JSON: the confusion matrix is at `confusion_matrix.mat
 
 ```json
 {
-  "adapter": "claude-opus-4.6",
+  "adapter": "claude-opus-5",
   "summary": { "accuracy": 0.9231, "..." : "..." },
   "per_tag": [ "..." ],
   "confusion_matrix": {

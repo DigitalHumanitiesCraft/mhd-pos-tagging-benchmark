@@ -33,6 +33,37 @@ def _write_cache(tmp_path, model_name: str, entries: dict[str, list[str]]) -> No
             f.write(json.dumps({"document_id": doc_id, "predictions": preds}) + "\n")
 
 
+def _write_cache_with_hashes(tmp_path, model_name: str, entries: list[tuple[str, str | None]]) -> None:
+    """Write a cache where each document carries a given config hash."""
+    cache_dir = tmp_path / model_name
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with open(cache_dir / "predictions.jsonl", "w", encoding="utf-8") as f:
+        for doc_id, config_hash in entries:
+            entry = {"document_id": doc_id, "predictions": ["NOM"]}
+            if config_hash is not None:
+                entry["config_hash"] = config_hash
+            f.write(json.dumps(entry) + "\n")
+
+
+class TestConfigHashVisibility:
+    """Chunk size shifted accuracy by 1.5 points, so a mixed cache is not one result."""
+
+    def test_single_config(self, tmp_path):
+        _write_cache_with_hashes(tmp_path, "m", [("d1", "aaa"), ("d2", "aaa")])
+        adapter = CachedAdapter("m", cache_dir=tmp_path)
+        assert adapter.config_hashes == {"aaa"}
+
+    def test_mixed_configs_are_visible(self, tmp_path):
+        _write_cache_with_hashes(tmp_path, "m", [("d1", "aaa"), ("d2", "bbb")])
+        adapter = CachedAdapter("m", cache_dir=tmp_path)
+        assert adapter.config_hashes == {"aaa", "bbb"}
+
+    def test_entries_without_hash_report_none(self, tmp_path):
+        _write_cache_with_hashes(tmp_path, "m", [("d1", None)])
+        adapter = CachedAdapter("m", cache_dir=tmp_path)
+        assert adapter.config_hashes == {None}
+
+
 class TestCachedAdapter:
     def test_predict_from_cache(self, tmp_path):
         _write_cache(tmp_path, "my-model", {"doc1": ["NOM", "VRB", "PRP"]})

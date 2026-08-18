@@ -58,7 +58,7 @@ Three access paths:
     ┌──────────────────┐ ┌───────────────┐ ┌──────────────────┐
     │ OpenAI-compat API│ │ Generic CLI   │ │ Custom adapter   │
     │ --adapter openai │ │ --adapter cli │ │ (user writes     │
-    │ --model gpt-4o   │ │ --cli-cmd ... │ │  Python class)   │
+    │ --model gpt-5.6  │ │ --preset ...  │ │  Python class)   │
     │ --base-url ...   │ │               │ │                  │
     └──────────────────┘ └───────────────┘ └──────────────────┘
     OpenAI, Mistral,     Claude Code,       BERT, CRF, HMM,
@@ -71,25 +71,29 @@ Three access paths:
 | ID | User Story | Priority | Status |
 |----|-----------|----------|--------|
 | E5.1 | As a researcher with an API key (OpenAI, Mistral, Gemini, Groq, or any OpenAI-compatible endpoint), I want to benchmark my model with `--adapter api --provider NAME --model MODEL --api-key KEY`, so that I don't need to write code or understand the adapter interface | Must | Done (GenericApiAdapter, openai SDK, provider presets for openai/gemini/mistral/groq) |
-| E5.2 | As a researcher with a CLI subscription (Claude, Gemini, Codex, Copilot, Vibe, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --preset NAME --model MODEL`, so that I can use any CLI-based LLM without writing an adapter | Must | Done (GenericCliAdapter with presets: claude, gemini, codex, copilot + `--cli-cmd` fallback for unknown CLIs) |
+| E5.2 | As a researcher with a CLI subscription (Claude, Antigravity, Gemini, Codex, Copilot, or any CLI that reads stdin and writes stdout), I want to benchmark my tool with `--adapter cli --preset NAME --model MODEL`, so that I can use any CLI-based LLM without writing an adapter | Must | Done (GenericCliAdapter with presets: claude, antigravity, gemini, codex, copilot + `--cli-cmd` fallback for unknown CLIs) |
 | E5.3 | As a developer with a custom model (fine-tuned BERT, CRF, HMM, or any model with Python bindings), I want a documented adapter interface with a working example, so that I can write a `ModelAdapter` subclass and plug it in without reading the full codebase | Must | Done (MODEL-ADAPTER-GUIDE.md with 3 examples: dictionary, BERT, CRF + runner script + checklist) |
 | E5.4 | As a researcher, I want `--api-base` support for the API adapter, so that I can point it at Ollama (`localhost:11434`), vLLM, LiteLLM, or any self-hosted endpoint | Should | Done (--api-base flag, auto-detects local endpoints and skips API key requirement) |
 | E5.5 | As a researcher, I want the shared MHG system prompt and response parsing used by all LLM adapters (API and CLI), so that prompt differences don't confound model comparison | Must | Done (prompt_template.py shared by all LLM adapters — API and CLI presets) |
 | E5.6 | As a researcher, I want `--adapter api --provider NAME` to work with just an env var (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, etc.) and no `--api-base` for the big providers, so that the common case is zero-config | Should | Done (provider presets in GenericApiAdapter with env var names + default base URLs) |
+| E5.7 | As a researcher, I want a CLI tool to see nothing but the tagging prompt, so that the model under test cannot read the benchmark's own documentation and the measurement is not confounded by the coding harness around the model | Must | Done 2026-08-18 (presets carry `--tools "" --strict-mcp-config`; subprocess runs in an empty temp dir via `isolate_cwd`) |
+| E5.8 | As a researcher, I want to name the evaluated documents explicitly with `--documents ID,ID`, so that a published number stays repeatable even when the corpus or the sampling code changes | Must | Done 2026-08-18 (`select_by_ids`, unknown IDs abort; `--subset` prints the pinned equivalent; saved JSON records `document_ids`) |
+| E5.9 | As a researcher, I want to be told when a comparison table mixes models scored on different documents, so that I don't publish numbers that describe different texts | Must | Done 2026-08-18 (`coverage_mismatch` warns and prints the `--documents` line for the shared set) |
+| E5.10 | As a researcher, I want `--chunk-size` exposed on the CLI, so that I can trade the number of model calls against per-call harness overhead without editing code | Should | Done 2026-08-18 (default 200 unchanged; the value is part of the cache config hash) |
 
 **Acceptance criteria (verified):**
 
 ```bash
 # API key users — zero-code, works out of the box
-mhd-bench evaluate corpus/ --adapter api --provider openai --model gpt-4o --api-key sk-...
-mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-2.5-pro --api-key AI...
-mhd-bench evaluate corpus/ --adapter api --provider mistral --model devstral --api-key ...
+mhd-bench evaluate corpus/ --adapter api --provider openai --model gpt-5.6 --api-key sk-...
+mhd-bench evaluate corpus/ --adapter api --provider gemini --model gemini-3.1-pro-preview --api-key AI...
+mhd-bench evaluate corpus/ --adapter api --provider mistral --model mistral-large-latest --api-key ...
 mhd-bench evaluate corpus/ --adapter api --api-base http://localhost:11434/v1 --model llama3
 
 # CLI subscription users — zero-code, works out of the box
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "claude -p --model opus" --model claude-opus-4.6
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "gemini -m gemini-3.1-pro-preview -p" --model gemini-3.1-pro-preview
-mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec" --model codex
+mhd-bench evaluate corpus/ --adapter cli --preset claude --model claude-opus-5
+mhd-bench evaluate corpus/ --adapter cli --preset antigravity --model "Gemini 3.1 Pro (High)"
+mhd-bench evaluate corpus/ --adapter cli --preset codex --model gpt-5.6-sol
 
 # Custom model users — implement ModelAdapter in Python
 # (interface documented in ARCHITECTURE.md with example)
@@ -100,7 +104,9 @@ mhd-bench evaluate corpus/ --adapter cli --cli-cmd "codex exec" --model codex
 - `GenericCliAdapter` sends prompt via stdin (avoids argument-length limits on Windows), appends empty string to `-p`/`--prompt` flags. System prompt embedded in user prompt with task-first structure (for agentic CLIs).
 - Custom adapters implement `ModelAdapter.predict(document) → list[str]`.
 - All paths share `prompt_template.py` (system prompt + response parsing + tag validation).
-- CLI presets know per-tool specifics: system prompt delivery (flag vs embed), prompt delivery (stdin vs argument), response format (raw vs JSON key), extra flags. Users can override or extend presets via `cli-profiles.yaml` (same schema as built-ins).
+- CLI presets know per-tool specifics: system prompt delivery (flag vs embed), prompt delivery (stdin vs argument), response format (raw vs JSON key), extra flags, and working-directory isolation. Users can override or extend presets via `cli-profiles.yaml` (same schema as built-ins).
+- Harness isolation (E5.7) is not cosmetic. Measured 2026-08-18: without it, a `claude -p` call started in this repository answered questions about the benchmark's corpus and tagset, and carried 25.782 input tokens of harness context per chunk instead of 1.814. Only `--tools ""` and `--strict-mcp-config` together produce that reduction; each alone changes little.
+- Model IDs are pinned in the docs with a verification date rather than left as aliases. An alias such as `opus` names the cache directory and the published number while silently pointing at a new model every few months.
 
 ### E3: Analysis & Publication (Phase 2–3)
 

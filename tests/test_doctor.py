@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import json
+
 from mhd_pos_benchmark.doctor import (
+    _API_KEYS,
+    _CLI_TOOLS,
     CheckResult,
+    cached_document_ids,
     check_api_keys,
     check_cli_tools,
     check_corpus,
     check_openai_sdk,
     check_python_version,
     find_corpus_dir,
+    is_shim,
     suggest_commands,
 )
 
@@ -103,26 +109,19 @@ class TestChecks:
 
 class TestSuggestCommands:
     def _make_results(self, cli_found=None, api_found=None, cached=None):
+        # Built from the real tables: suggest_commands zips its results against
+        # _CLI_TOOLS / _API_KEYS positionally, so a hand-written list silently
+        # misaligns as soon as a tool is added.
         cli_found = cli_found or []
         api_found = api_found or []
         cached = cached or []
         cli_results = [
-            CheckResult(name, "ok" if name in cli_found else "warn", "")
-            for _, name, _, _ in [
-                ("claude", "Claude", "", ""),
-                ("gemini", "Gemini", "", ""),
-                ("codex", "Codex", "", ""),
-                ("copilot", "Copilot", "", ""),
-            ]
+            CheckResult(display, "ok" if display in cli_found else "warn", "")
+            for _, display, _, _ in _CLI_TOOLS
         ]
         api_results = [
             CheckResult(env, "ok" if env in api_found else "warn", "")
-            for env, _, _ in [
-                ("GEMINI_API_KEY", "gemini", ""),
-                ("OPENAI_API_KEY", "openai", ""),
-                ("MISTRAL_API_KEY", "mistral", ""),
-                ("GROQ_API_KEY", "groq", ""),
-            ]
+            for env, _, _ in _API_KEYS
         ]
         cache_results = [CheckResult(m, "ok", "3 docs") for m in cached]
         return cli_results, api_results, cache_results
@@ -143,13 +142,39 @@ class TestSuggestCommands:
         assert len(suggestions) == 1
         assert "gemini" in suggestions[0].lower()
 
-    def test_cached_models_adds_compare(self):
+    def _write_cache(self, cache_dir, model, doc_ids):
+        model_dir = cache_dir / model
+        model_dir.mkdir(parents=True)
+        lines = [
+            json.dumps({"document_id": d, "predictions": ["NOM"], "config_hash": "x"})
+            for d in doc_ids
+        ]
+        (model_dir / "predictions.jsonl").write_text("\n".join(lines), encoding="utf-8")
+
+    def test_cached_models_adds_compare(self, tmp_path):
+        self._write_cache(tmp_path, "model-a", ["M001", "M002"])
+        self._write_cache(tmp_path, "model-b", ["M002", "M003"])
         cli_r, api_r, cache_r = self._make_results(
             cli_found=["Claude"],
-            cached=["claude-opus", "gemini-2.5-pro"],
+            cached=["model-a", "model-b"],
         )
-        suggestions = suggest_commands(cli_r, api_r, cache_r, corpus_found=True)
-        assert any("compare" in s for s in suggestions)
+        suggestions = suggest_commands(
+            cli_r, api_r, cache_r, corpus_found=True, cache_dir=tmp_path,
+        )
+        compare = next(s for s in suggestions if "mhd-bench compare" in s)
+        assert "model-a,model-b" in compare
+        assert "1 shared documents" in compare
+
+    def test_disjoint_caches_do_not_suggest_compare(self, tmp_path):
+        """Comparing caches with no shared documents aborts on the first miss."""
+        self._write_cache(tmp_path, "model-a", ["M001"])
+        self._write_cache(tmp_path, "model-b", ["M999"])
+        cli_r, api_r, cache_r = self._make_results(cached=["model-a", "model-b"])
+        suggestions = suggest_commands(
+            cli_r, api_r, cache_r, corpus_found=True, cache_dir=tmp_path,
+        )
+        assert not any("mhd-bench compare" in s for s in suggestions)
+        assert any("share no documents" in s for s in suggestions)
 
     def test_nothing_found(self):
         cli_r, api_r, cache_r = self._make_results()
@@ -172,6 +197,68 @@ class TestSuggestCommands:
         suggestions = suggest_commands(cli_r, api_r, cache_r, corpus_found=True)
         evaluate_suggestions = [s for s in suggestions if "evaluate" in s]
         assert len(evaluate_suggestions) <= 2
+
+
+class TestShimDetection:
+    """The VS Code Copilot extension ships a launcher that shadows the real CLI."""
+
+    def test_vscode_copilot_shim(self):
+        path = (
+            r"c:\Users\x\AppData\Roaming\Code\User\globalStorage"
+            r"\github.copilot-chat\copilotCli\copilot.ps1"
+        )
+        assert is_shim(path)
+
+    def test_real_cli_is_not_a_shim(self):
+        assert not is_shim(r"C:\Users\x\.local\bin\claude.EXE")
+        assert not is_shim("/usr/local/bin/copilot")
+
+    def test_shim_reported_as_warning(self, monkeypatch):
+        """Only a shim on PATH must not read as an installed tool."""
+        shim = r"C:\Users\x\AppData\Roaming\Code\User\globalStorage\cli.ps1"
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.doctor.shutil.which",
+            lambda name, path=None: shim if path is None else None,
+        )
+        results = check_cli_tools()
+        assert all(r.status == "warn" for r in results)
+        assert all("editor shim" in r.message for r in results)
+
+    def test_real_cli_behind_a_shim_is_found(self, monkeypatch):
+        shim = r"C:\Users\x\AppData\Roaming\Code\User\globalStorage\copilot.CMD"
+        real = r"C:\Users\x\AppData\Roaming\npm\copilot.CMD"
+        monkeypatch.setenv("PATH", r"C:\Users\x\AppData\Roaming\npm")
+        monkeypatch.setattr(
+            "mhd_pos_benchmark.doctor.shutil.which",
+            lambda name, path=None: shim if path is None else real,
+        )
+        results = check_cli_tools()
+        assert all(r.status == "ok" for r in results)
+        assert all(r.message == real for r in results)
+
+
+class TestCachedDocumentIds:
+    def test_reads_ids(self, tmp_path):
+        model_dir = tmp_path / "m"
+        model_dir.mkdir()
+        (model_dir / "predictions.jsonl").write_text(
+            '{"document_id": "M001", "predictions": ["NOM"]}\n'
+            "\n"
+            '{"document_id": "M002", "predictions": ["VRB"]}\n',
+            encoding="utf-8",
+        )
+        assert cached_document_ids("m", tmp_path) == {"M001", "M002"}
+
+    def test_missing_cache_is_empty(self, tmp_path):
+        assert cached_document_ids("nope", tmp_path) == set()
+
+    def test_skips_corrupt_lines(self, tmp_path):
+        model_dir = tmp_path / "m"
+        model_dir.mkdir()
+        (model_dir / "predictions.jsonl").write_text(
+            'not json\n{"document_id": "M001"}\n', encoding="utf-8"
+        )
+        assert cached_document_ids("m", tmp_path) == {"M001"}
 
 
 class TestDoctorCli:

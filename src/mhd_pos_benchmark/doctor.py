@@ -6,6 +6,7 @@ All check functions return CheckResult dataclasses and have no side effects.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -31,21 +32,38 @@ _CORPUS_CANDIDATES = [
     "cora-xml",
 ]
 
-# CLI tools we know about: (binary_name, display_name, adapter_cmd_template, model_name)
+# CLI tools we know about: (binary_name, display_name, preset_name, model_name)
+# All four subscription paths verified end to end on 2026-08-18. Suggestions use
+# --preset so callers inherit the isolation flags from cli_presets rather than a
+# hand-written command. Model names are each tool's own IDs, read from the tool
+# itself (`agy models`, ~/.codex/models_cache.json) or probed against the
+# subscription; they differ from the API model IDs. See cli_presets for the
+# full per-tool lists.
 _CLI_TOOLS = [
-    ("claude", "Claude", 'claude -p --model opus', "claude-opus-4.6"),
-    ("gemini", "Gemini", 'gemini -m gemini-2.5-pro -p', "gemini-2.5-pro"),
-    ("codex", "Codex", 'codex exec', "codex"),
-    ("copilot", "Copilot", 'copilot -p -s', "copilot"),
+    ("claude", "Claude", "claude", "claude-opus-5"),
+    ("agy", "Antigravity", "antigravity", "gemini-3.1-pro-high"),
+    ("gemini", "Gemini", "gemini", "gemini-3.1-pro-preview"),
+    ("codex", "Codex", "codex", "gpt-5.6-sol"),
+    ("copilot", "Copilot", "copilot", "claude-sonnet-4.6"),
 ]
 
 # API keys we look for: (env_var, provider_name, default_model)
 _API_KEYS = [
-    ("GEMINI_API_KEY", "gemini", "gemini-2.5-pro"),
-    ("OPENAI_API_KEY", "openai", "gpt-4o"),
-    ("MISTRAL_API_KEY", "mistral", "devstral"),
-    ("GROQ_API_KEY", "groq", "llama-3.3-70b-versatile"),
+    ("GEMINI_API_KEY", "gemini", "gemini-3.1-pro-preview"),
+    ("OPENAI_API_KEY", "openai", "gpt-5.6"),
+    ("MISTRAL_API_KEY", "mistral", "mistral-large-latest"),
+    ("GROQ_API_KEY", "groq", "openai/gpt-oss-120b"),
 ]
+
+# Path fragments that mark an editor-bundled launcher rather than a real CLI.
+# The VS Code Copilot extension ships a copilot.ps1 that only offers to install
+# the actual CLI and blocks on an interactive prompt when run headless.
+_SHIM_PATH_MARKERS = (
+    "globalStorage",
+    "github.copilot-chat",
+    ".vscode",
+    "Microsoft VS Code",
+)
 
 
 def find_corpus_dir(base: Path | None = None) -> Path | None:
@@ -107,15 +125,68 @@ def check_api_keys() -> list[CheckResult]:
     return results
 
 
+def is_shim(path: str) -> bool:
+    """Whether a resolved executable path looks like an editor-bundled launcher."""
+    return any(marker.lower() in path.lower() for marker in _SHIM_PATH_MARKERS)
+
+
+def resolve_real_executable(name: str) -> str | None:
+    """Find a CLI on PATH, skipping editor-bundled launchers.
+
+    The VS Code Copilot extension installs a `copilot` launcher that shadows the
+    real CLI on PATH. It only offers to install the actual tool and blocks on an
+    interactive prompt, so both `doctor` and the CLI adapter have to look past it.
+    """
+    first_hit = shutil.which(name)
+    if first_hit is None or not is_shim(first_hit):
+        return first_hit
+
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        candidate = shutil.which(name, path=directory)
+        if candidate and not is_shim(candidate):
+            return candidate
+    return None
+
+
 def check_cli_tools() -> list[CheckResult]:
     results = []
     for binary, display, _, _ in _CLI_TOOLS:
-        path = shutil.which(binary)
+        path = resolve_real_executable(binary)
         if path:
             results.append(CheckResult(display, "ok", path))
+        elif shutil.which(binary):
+            results.append(CheckResult(
+                display, "warn", f"editor shim only ({shutil.which(binary)})",
+                fix_hint=f"Install the real {display} CLI; the bundled launcher "
+                         "prompts interactively and cannot be scripted.",
+            ))
         else:
             results.append(CheckResult(display, "warn", "not found"))
     return results
+
+
+def cached_document_ids(model: str, cache_dir: Path | None = None) -> set[str]:
+    """Document IDs present in one model's prediction cache."""
+    cache_dir = cache_dir or Path("results")
+    pred_file = cache_dir / model / "predictions.jsonl"
+    if not pred_file.exists():
+        return set()
+
+    ids: set[str] = set()
+    for line in pred_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        doc_id = entry.get("document_id")
+        if doc_id:
+            ids.add(doc_id)
+    return ids
 
 
 def check_cache_status(cache_dir: Path | None = None) -> list[CheckResult]:
@@ -135,13 +206,14 @@ def suggest_commands(
     api_key_results: list[CheckResult],
     cache_results: list[CheckResult],
     corpus_found: bool,
+    cache_dir: Path | None = None,
 ) -> list[str]:
     """Generate max 2 evaluate + 1 compare suggestion based on available tools.
 
     Priority:
     1. Max 1 CLI suggestion (flat-rate, cheapest) — first found CLI tool
     2. Max 1 API suggestion (fastest) — first found API key
-    3. If >=2 cached models: compare command
+    3. If >=2 cached models share documents: compare command
     """
     if not corpus_found:
         return []
@@ -149,12 +221,12 @@ def suggest_commands(
     suggestions: list[str] = []
 
     # 1. Best CLI option (first found)
-    for (binary, display, cmd_template, model_name), result in zip(_CLI_TOOLS, cli_results):
+    for (binary, display, preset, model_name), result in zip(_CLI_TOOLS, cli_results):
         if result.status == "ok":
             suggestions.append(
                 f'# Evaluate with {display} CLI (flat-rate, 3 documents):\n'
-                f'mhd-bench evaluate --adapter cli --cli-cmd "{cmd_template}" '
-                f'--model {model_name} --subset 3'
+                f'mhd-bench evaluate --adapter cli --preset {preset} '
+                f'--model "{model_name}" --subset 3'
             )
             break
 
@@ -168,14 +240,36 @@ def suggest_commands(
             )
             break
 
-    # 3. Compare cached results (if >=2 models)
+    # 3. Compare cached results — only models that actually share documents.
+    # Comparing disjoint caches aborts on the first missing document, so an
+    # unchecked suggestion here sends people straight into a traceback.
     cached_models = [r.name for r in cache_results]
     if len(cached_models) >= 2:
-        model_list = ",".join(cached_models[:4])  # cap at 4 for readability
-        suggestions.append(
-            f'# Compare your cached results:\n'
-            f'mhd-bench compare --models {model_list}'
-        )
+        doc_ids = {m: cached_document_ids(m, cache_dir) for m in cached_models}
+        comparable = [
+            m for m in cached_models
+            if any(
+                other != m and doc_ids[m] & doc_ids[other]
+                for other in cached_models
+            )
+        ]
+        if len(comparable) >= 2:
+            selected = comparable[:4]  # cap at 4 for readability
+            shared = sorted(set.intersection(*(doc_ids[m] for m in selected)))
+            model_list = ",".join(selected)
+            # Name the shared documents outright: --subset would re-sample and
+            # could pick documents no cache covers.
+            suggestions.append(
+                f'# Compare your cached results ({len(shared)} shared documents):\n'
+                f'mhd-bench compare --models {model_list} \\\n'
+                f'  --documents {",".join(shared)}'
+            )
+        else:
+            suggestions.append(
+                '# Cached models share no documents, so they cannot be compared.\n'
+                '# Re-run evaluate for one of them on the same subset, e.g.:\n'
+                '#   mhd-bench evaluate --adapter cli --preset claude --subset 8'
+            )
 
     # 4. Nothing found at all
     if not suggestions:

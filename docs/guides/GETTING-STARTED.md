@@ -125,24 +125,51 @@ The output should contain:
 
 You can test any LLM you have access to. Two common paths:
 
-### Option A: CLI tool (e.g. Claude, Gemini CLI)
+### Option A: CLI tool (e.g. Claude, Antigravity)
 
-If you have a CLI tool installed (e.g. `claude` or `gemini`):
+If you have a CLI tool installed (`claude`, `agy`, `codex`, `copilot`):
 
 ```bash
 mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
   --adapter cli \
-  --cli-cmd "claude -p --model opus" \
-  --model claude-opus-4.6 \
+  --preset claude \
+  --model claude-opus-5 \
   --subset 1
 ```
 
 What the flags mean:
 
 - `--adapter cli` tells the benchmark to use a CLI tool
-- `--cli-cmd "claude -p --model opus"` is the command to invoke
-- `--model claude-opus-4.6` is the name under which results are stored and displayed
+- `--preset claude` selects the built-in configuration for that tool: which flags
+  it needs, how it takes a system prompt, how its output is parsed, and that it
+  must run in an empty directory so it cannot read your project files
+- `--model claude-opus-5` is both the model requested and the name under which
+  results are stored. Use a full version, not an alias like `opus`: aliases move
+  to a new model every few months, and then a cached result no longer says which
+  model produced it.
 - `--subset 1` tests only one document (fast and cheap for a first try)
+
+Available presets: `claude`, `antigravity`, `gemini`, `codex`, `copilot`. If your
+tool is not among them, use `--cli-cmd "your-tool --flags"` instead. Run
+`mhd-bench doctor` to see which of them are installed.
+
+**Take the model name from the tool, not from a model announcement.** Each CLI
+has its own naming, and it is usually not the API model ID. A name that the tool
+does not know is rejected right away, which is harmless, but the reverse mistake
+costs more: concluding that a model is unavailable when only the spelling was
+wrong. Where to look:
+
+| Preset | How to see the available models |
+|---|---|
+| `claude` | `--model` takes an alias (`opus`, `sonnet`) or a full ID like `claude-opus-5` |
+| `antigravity` | `agy models` prints ID and display name; the ID is the left column |
+| `codex` | `~/.codex/models_cache.json`, or `/model` in the interactive TUI |
+| `copilot` | `/model` in the interactive TUI |
+
+Two notes on availability, current as of August 2026: Gemini CLI stopped serving
+consumer accounts on 18 June 2026 and now needs a paid `GEMINI_API_KEY`, so
+Option B is the easier route for Gemini. Its successor is the Antigravity CLI
+(`agy`), available through the `antigravity` preset.
 
 ### Option B: API with key (e.g. OpenAI, Gemini API)
 
@@ -152,7 +179,7 @@ If you have an API key:
 mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
   --adapter api \
   --provider gemini \
-  --model gemini-2.5-pro \
+  --model gemini-3.1-pro-preview \
   --api-key \
   --subset 1
 ```
@@ -188,10 +215,10 @@ Add `--output` to write results as JSON:
 ```bash
 mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
   --adapter cli \
-  --cli-cmd "claude -p --model opus" \
-  --model claude-opus-4.6 \
+  --preset claude \
+  --model claude-opus-5 \
   --subset 3 \
-  --output results/claude-opus-4.6.json
+  --output results/claude-opus-5.json
 ```
 
 The JSON file contains accuracy, per-tag metrics, and the full confusion matrix. You can process it further in Python, R, or any other tool.
@@ -203,18 +230,19 @@ This is the core use case — "Which model tags MHG better?" The workflow is: ev
 ### Run each model
 
 ```bash
-# Model 1: Claude Opus 4.6 (via CLI)
+# Model 1: Claude Opus 5 (via CLI subscription)
 mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
   --adapter cli \
-  --cli-cmd "claude -p --model opus" \
-  --model claude-opus-4.6 \
+  --preset claude \
+  --model claude-opus-5 \
   --subset 3
 
-# Model 2: Gemini 2.5 Pro (via CLI)
+# Model 2: Gemini 3.1 Pro (via API key)
 mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
-  --adapter cli \
-  --cli-cmd "gemini -m gemini-2.5-pro -p" \
-  --model gemini-2.5-pro \
+  --adapter api \
+  --provider gemini \
+  --model gemini-3.1-pro-preview \
+  --api-key \
   --subset 3
 ```
 
@@ -224,7 +252,7 @@ Each run takes a few minutes (depending on the model and document sizes). Result
 
 ```bash
 mhd-bench compare ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
-  --models claude-opus-4.6,gemini-2.5-pro \
+  --models claude-opus-5,gemini-3.1-pro-preview \
   --subset 3
 ```
 
@@ -232,9 +260,9 @@ This loads the cached predictions (no new API calls) and produces a side-by-side
 
 ```
               Head-to-Head
-┌──────────────────┬─────────────────┬──────────────┐
-│ Metric           │ claude-opus-4.6 │ gemini-2.5-pro│
-├──────────────────┼─────────────────┼──────────────┤
+┌──────────────────┬─────────────────┬────────────────────────┐
+│ Metric           │ claude-opus-5   │ gemini-3.1-pro-preview │
+├──────────────────┼─────────────────┼────────────────────────┤
 │ Accuracy         │          0.9231 │       0.8846 │
 │ Macro-F1         │          0.9048 │       0.8512 │
 │ Micro-F1         │          0.9231 │       0.8846 │
@@ -246,7 +274,16 @@ Below that, a per-tag F1 comparison shows which word classes each model handles 
 
 ### Tips for meaningful comparisons
 
-- **Same subset:** Both `evaluate` runs and `compare` must use the same `--subset` value. The subset is deterministic (same seed), so `--subset 3` always picks the same 3 documents.
+- **Same documents:** Every model must be scored on the same texts, otherwise the numbers in the table describe different things. `compare` warns you when that happened, but it can only warn after the fact.
+- **Pin the selection for anything you publish.** `--subset 3` picks three documents by sampling, and the sample moves when the corpus or the sampling code changes. Each `--subset` run therefore prints the equivalent `--documents` line; copy it into your notes and use it from then on:
+
+```bash
+mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
+  --adapter cli --preset claude --model claude-opus-5 \
+  --documents M033,M174,M040
+```
+
+  The saved JSON also records `document_ids`, so an old result can always tell you what it covered.
 - **Start small:** `--subset 3` for quick tests, `--subset 10` for paper-worthy results, no `--subset` for the full 406-document corpus.
 - **Add baselines:** The `majority` adapter (most frequent tag for every token) gives you a lower bound. Run it once and include it in your comparison:
 
@@ -255,7 +292,7 @@ mhd-bench evaluate ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
   --adapter majority --subset 3
 
 mhd-bench compare ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
-  --models majority-class,claude-opus-4.6,gemini-2.5-pro \
+  --models majority-class,claude-opus-5,gemini-3.1-pro-preview \
   --subset 3
 ```
 
@@ -263,9 +300,9 @@ mhd-bench compare ReM-v2.1_coraxml/ReM-v2.1_coraxml/cora-xml/ \
 
 ```
 results/
-├── claude-opus-4.6/
+├── claude-opus-5/
 │   └── predictions.jsonl       ← cached predictions, one line per document
-├── gemini-2.5-pro/
+├── gemini-3.1-pro-preview/
 │   └── predictions.jsonl
 └── majority-class/
     └── predictions.jsonl
@@ -274,7 +311,7 @@ results/
 These caches are gitignored (local only). Delete a model's folder to force re-evaluation:
 
 ```bash
-rm -rf results/claude-opus-4.6/    # next evaluate run will re-tag everything
+rm -rf results/claude-opus-5/    # next evaluate run will re-tag everything
 ```
 
 ## Going further
